@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "BudgetApp",
+  "short_name": "BudgetApp",
+  "description": "Presupuesto y planificación económica sencilla para el hogar.",
+  "lang": "es",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#163d30",
+  "icons": [
+    {
+      "src": "/icons/budgetapp-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/budgetapp-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

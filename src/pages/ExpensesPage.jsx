@@ -1,0 +1,59 @@
+import { CalendarRange, ReceiptText, ShoppingBasket } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+import { PageHeader } from '../components/ui/PageHeader';
+
+const expenseTypes = [
+  {
+    description: 'Pagos mensuales o periódicos con una cantidad prevista.',
+    icon: CalendarRange,
+    title: 'Recurrentes',
+    to: '/gastos/recurrentes',
+  },
+  {
+    description: 'Importes reales que ayudan a calcular una media fiable.',
+    icon: ReceiptText,
+    title: 'Facturas',
+    to: '/facturas',
+  },
+  {
+    description: 'Compras o totales mensuales que cambian cada periodo.',
+    icon: ShoppingBasket,
+    title: 'Variables',
+    to: '/gastos/variables',
+  },
+];
+
+export function ExpensesPage() {
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Gastos"
+      />
+
+      <section aria-labelledby="tipos-gasto" id="tipos-de-gasto">
+        <h2 className="text-lg font-bold text-text" id="tipos-gasto">
+          Datos que necesitarás
+        </h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {expenseTypes.map(({ description, icon: Icon, title, to }) => (
+            <Link
+              className="rounded-2xl border border-border bg-surface p-5 shadow-card transition-colors hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              key={title}
+              to={to}
+            >
+              <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand-strong">
+                <Icon aria-hidden="true" className="size-5" />
+              </span>
+              <h3 className="mt-4 font-bold text-text">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                {description}
+              </p>
+              <span className="mt-5 inline-flex min-h-11 items-center text-sm font-bold text-brand-strong">Abrir {title.toLowerCase()}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
