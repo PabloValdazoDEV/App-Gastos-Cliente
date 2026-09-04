@@ -98,7 +98,7 @@ describe('NotificationsPage', () => {
     http.patch.mockResolvedValue({
       ...preferences,
       emailEnabled: false,
-      defaultOffsets: [14, 3],
+      defaultOffsets: [30, 7],
     });
 
     renderPage();
@@ -106,14 +106,12 @@ describe('NotificationsPage', () => {
     await user.click(
       screen.getByRole('checkbox', { name: /Correo electrónico/i }),
     );
-    const offsets = screen.getByLabelText('Antelación predeterminada');
-    await user.clear(offsets);
-    await user.type(offsets, '14, 3');
+    await user.click(screen.getByRole('checkbox', { name: '1 día antes' }));
     await user.click(screen.getByRole('button', { name: 'Guardar preferencias' }));
 
     await waitFor(() =>
       expect(http.patch).toHaveBeenCalledWith('/notification-preferences', {
-        defaultOffsets: [14, 3],
+        defaultOffsets: [30, 7],
         emailEnabled: false,
         inAppEnabled: true,
         webPushEnabled: false,

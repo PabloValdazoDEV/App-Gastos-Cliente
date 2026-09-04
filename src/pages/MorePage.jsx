@@ -1,9 +1,22 @@
-import { Bell, ChevronRight, Settings, SlidersHorizontal, UsersRound } from 'lucide-react';
+import {
+  Bell,
+  ChevronRight,
+  Settings,
+  SlidersHorizontal,
+  UsersRound,
+  WalletCards,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader';
 
 const secondarySections = [
+  {
+    description: 'Saldo de la cuenta conjunta y de las cuentas personales.',
+    icon: WalletCards,
+    title: 'Cuentas y saldos',
+    to: '/cuentas',
+  },
   {
     description: 'Personas, reparto y permisos de acceso.',
     icon: UsersRound,

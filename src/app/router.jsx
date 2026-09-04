@@ -13,6 +13,7 @@ import { RouteErrorPage } from '../pages/RouteErrorPage';
 import { HouseholdProvider } from '../features/households/HouseholdProvider';
 import {
   AccountSessionsPage,
+  AccountsPage,
   BudgetPage,
   CalendarPage,
   DashboardPage,
@@ -26,6 +27,7 @@ import {
   MorePage,
   NotFoundPage,
   NotificationsPage,
+  OneTimeExpensesPage,
   PlanningPage,
   PrivacyPage,
   RecurringExpensesPage,
@@ -89,6 +91,7 @@ export const router = createBrowserRouter([
               { path: 'gastos/recurrentes', element: <RecurringExpensesPage /> },
               { path: 'gastos/recurrentes/:expenseId', element: <RecurringExpensesPage /> },
               { path: 'gastos/variables', element: <VariableExpensesPage /> },
+              { path: 'gastos/puntuales', element: <OneTimeExpensesPage /> },
               { path: 'facturas', element: <InvoicesPage /> },
               { path: 'calendario', element: <CalendarPage /> },
               { path: 'planificacion', element: <PlanningPage /> },
@@ -97,6 +100,7 @@ export const router = createBrowserRouter([
               { path: 'hogar', element: <HouseholdPage /> },
               { path: 'ajustes', element: <SettingsPage /> },
               { path: 'mas', element: <MorePage /> },
+              { path: 'cuentas', element: <AccountsPage /> },
               { path: 'mas/sesiones', element: <AccountSessionsPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],

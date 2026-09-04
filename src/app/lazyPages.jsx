@@ -5,6 +5,9 @@ export const AccountSessionsPage = lazy(() =>
     default: module.AccountSessionsPage,
   })),
 );
+export const AccountsPage = lazy(() =>
+  import('../pages/AccountsPage').then((module) => ({ default: module.AccountsPage })),
+);
 export const CalendarPage = lazy(() =>
   import('../pages/CalendarPage').then((module) => ({ default: module.CalendarPage })),
 );
@@ -16,6 +19,11 @@ export const DashboardPage = lazy(() =>
 );
 export const ExpensesPage = lazy(() =>
   import('../pages/ExpensesPage').then((module) => ({ default: module.ExpensesPage })),
+);
+export const OneTimeExpensesPage = lazy(() =>
+  import('../pages/OneTimeExpensesPage').then((module) => ({
+    default: module.OneTimeExpensesPage,
+  })),
 );
 export const HouseholdPage = lazy(() =>
   import('../pages/HouseholdPage').then((module) => ({ default: module.HouseholdPage })),

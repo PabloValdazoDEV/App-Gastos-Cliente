@@ -3,6 +3,7 @@ import { formatCents } from '../money';
 export function ContributionBreakdown({
   adjustmentCents = 0,
   currency,
+  contributionBps,
   householdCents,
   inverted = false,
   pendingAdjustment = false,
@@ -22,7 +23,10 @@ export function ContributionBreakdown({
   return (
     <dl className="mt-3 space-y-2 text-sm">
       <div className="flex items-start justify-between gap-3">
-        <dt className={labelClass}>Aportación conjunta</dt>
+        <dt className={labelClass}>
+          Aportación conjunta
+          {Number.isInteger(contributionBps) ? ` (${contributionBps / 100} %)` : ''}
+        </dt>
         <dd className={`font-bold ${valueClass}`}>
           {formatCents(resolvedHousehold, currency)}
         </dd>

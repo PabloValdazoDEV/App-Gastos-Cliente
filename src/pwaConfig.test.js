@@ -25,6 +25,13 @@ describe('PWA configuration', () => {
       ]),
     );
     expect(indexHtml).toContain('name="apple-mobile-web-app-capable" content="yes"');
+    expect(indexHtml).toContain(
+      'rel="icon" type="image/png" sizes="192x192" href="/icons/budgetapp-192.png"',
+    );
+    expect(indexHtml).toContain(
+      'rel="icon" type="image/png" sizes="512x512" href="/icons/budgetapp-512.png"',
+    );
+    expect(indexHtml).toContain('rel="shortcut icon" type="image/png"');
     expect(indexHtml).toContain('rel="apple-touch-icon" sizes="180x180"');
     expect(indexHtml).toContain('rel="manifest" href="/manifest.webmanifest"');
   });

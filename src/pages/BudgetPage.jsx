@@ -9,11 +9,16 @@ import { financeService } from '../features/finance/financeService';
 import { formatCents } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
 import { CategoryIconBadge } from '../features/households/categoryIcons';
+import { useMemo, useState } from 'react';
+import { householdService } from '../features/households/householdService';
+import { categoriesFrom } from './expensePageUtils';
+import { ExpenseFilters } from './expensePageShared';
 
 const typeLabels = {
   RECURRING: 'Recurrente',
   INVOICE: 'Factura',
   VARIABLE: 'Variable',
+  ONE_TIME: 'Puntual',
 };
 
 export function BudgetPage() {
@@ -24,6 +29,25 @@ export function BudgetPage() {
     queryFn: () => financeService.budget(householdId),
     enabled: Boolean(householdId),
   });
+  const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const categoriesQuery = useQuery({
+    queryKey: ['householdCategories', householdId],
+    queryFn: () => householdService.listCategories(householdId),
+    enabled: Boolean(householdId),
+  });
+  const budget = query.data;
+  const categories = categoriesFrom(categoriesQuery.data);
+  const filteredLines = useMemo(() => {
+    const normalized = search.trim().toLocaleLowerCase('es');
+    return (budget?.lines ?? []).filter((line) => {
+      const matchesSearch = !normalized || [line.name, line.category?.name].some((value) => String(value ?? '').toLocaleLowerCase('es').includes(normalized));
+      return matchesSearch &&
+        (scopeFilter === 'ALL' || line.scope === scopeFilter) &&
+        (categoryFilter === 'ALL' || line.category?.id === categoryFilter || line.categoryId === categoryFilter);
+    });
+  }, [budget?.lines, categoryFilter, scopeFilter, search]);
 
   if (householdPending) return <LoadingState />;
   if (!householdId) {
@@ -39,7 +63,6 @@ export function BudgetPage() {
   if (query.isPending) return <LoadingState label="Calculando presupuesto" />;
   if (query.isError) return <ErrorState description={query.error.message} onRetry={query.refetch} />;
 
-  const budget = query.data;
   return (
     <div className="space-y-8">
       <PageHeader
@@ -58,10 +81,12 @@ export function BudgetPage() {
             <article className="rounded-2xl border border-border bg-surface p-5">
               <p className="text-sm font-semibold text-text-muted">Gastos comunes</p>
               <p className="mt-2 text-2xl font-extrabold">{formatCents(budget.householdBudgetCents, currentHousehold.currency)}</p>
+              <p className="mt-1 text-xs text-text-muted">Incluye {formatCents(budget.householdMarginCents, currentHousehold.currency)} de margen</p>
             </article>
             <article className="rounded-2xl border border-border bg-surface p-5">
               <p className="text-sm font-semibold text-text-muted">Gastos personales</p>
               <p className="mt-2 text-2xl font-extrabold">{formatCents(budget.personalBudgetCents, currentHousehold.currency)}</p>
+              <p className="mt-1 text-xs text-text-muted">Incluye {formatCents(budget.personalMarginCents, currentHousehold.currency)} de margen</p>
             </article>
             <article className="rounded-2xl bg-brand-deep p-5 text-on-brand">
               <p className="text-sm font-semibold text-on-brand-muted">Total recomendado</p>
@@ -91,10 +116,21 @@ export function BudgetPage() {
 
           <section aria-labelledby="desglose-presupuesto">
             <h2 className="text-lg font-bold" id="desglose-presupuesto">Desglose del cálculo</h2>
-            {budget.lines.length ? (
+            <div className="mt-4">
+              <ExpenseFilters
+                categories={categories}
+                categoryId={categoryFilter}
+                onCategoryChange={setCategoryFilter}
+                onScopeChange={setScopeFilter}
+                onSearchChange={setSearch}
+                scope={scopeFilter}
+                search={search}
+              />
+            </div>
+            {filteredLines.length ? (
               <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
                 <ul className="divide-y divide-border">
-                  {budget.lines.map((line) => (
+                  {filteredLines.map((line) => (
                     <li className="flex flex-wrap items-center gap-3 p-4" key={`${line.type}-${line.id}`}>
                       <CategoryIconBadge category={line.category} />
                       <span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-bold text-text-muted">{typeLabels[line.type]}</span>
@@ -103,7 +139,7 @@ export function BudgetPage() {
                         <p className="mt-0.5 text-xs font-semibold text-text-muted">
                           {line.scope === 'PERSONAL' ? 'Gasto personal' : 'Gasto común'}
                         </p>
-                        <p className="text-xs text-text-soft">Base {formatCents(line.baseCents, currentHousehold.currency)} + margen {line.effectiveMarginBps / 100} %</p>
+                        <p className="text-xs text-text-soft">Base {formatCents(line.baseCents, currentHousehold.currency)} + margen {line.effectiveMarginBps / 100} % ({formatCents(line.amountCents - line.baseCents, currentHousehold.currency)})</p>
                       </div>
                       <p className="font-extrabold">{formatCents(line.amountCents, currentHousehold.currency)}</p>
                     </li>

@@ -21,6 +21,7 @@ vi.mock('../features/households/householdService', () => ({
     list: vi.fn(),
     listInvitations: vi.fn(),
     listPeople: vi.fn(),
+    revokeInvitation: vi.fn(),
     update: vi.fn(),
     updateDistribution: vi.fn(),
   },
@@ -252,6 +253,50 @@ describe('HouseholdPage', () => {
     expect(
       (await screen.findByLabelText('Enlace de invitación')).value,
     ).toContain('#token=secure-invitation-token');
+  });
+
+  it('permite cancelar una invitación pendiente con confirmación', async () => {
+    const user = userEvent.setup();
+    const invitationId = '10000000-0000-4000-8000-000000000009';
+    useHousehold.mockReturnValue({
+      currentHousehold: household,
+      households: [household],
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+      selectHousehold: vi.fn(),
+    });
+    householdService.get.mockResolvedValue(household);
+    householdService.listPeople.mockResolvedValue({
+      contributionMode: 'PERCENTAGE',
+      people,
+    });
+    householdService.listInvitations.mockResolvedValue([
+      {
+        id: invitationId,
+        email: 'persona@example.com',
+        role: 'MEMBER',
+        status: 'PENDING',
+        expiresAt: '2026-09-10T12:00:00.000Z',
+      },
+    ]);
+    householdService.revokeInvitation.mockResolvedValue({
+      id: invitationId,
+      status: 'REVOKED',
+      revokedAt: '2026-09-04T12:00:00.000Z',
+    });
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Cancelar', exact: true }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('¿Cancelar esta invitación?');
+    await user.click(screen.getByRole('button', { name: 'Cancelar invitación', exact: true }));
+
+    await waitFor(() =>
+      expect(householdService.revokeInvitation).toHaveBeenCalledWith({
+        householdId,
+        invitationId,
+      }),
+    );
   });
 
   it('permite a owner configurar el día habitual de aportación', async () => {

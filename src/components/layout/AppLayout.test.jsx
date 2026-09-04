@@ -88,6 +88,7 @@ describe('AppLayout', () => {
     expect(
       screen.getByRole('link', { name: 'Saltar al contenido principal' }),
     ).toHaveAttribute('href', '#contenido-principal');
+    expect(document.getElementById('contenido-principal')).toHaveClass('focus:outline-none');
   });
 
   it('mantiene el acceso global a notificaciones sin añadir otro destino móvil', async () => {

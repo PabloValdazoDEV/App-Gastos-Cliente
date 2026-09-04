@@ -10,7 +10,6 @@ import { DashboardPage } from './DashboardPage';
 vi.mock('../features/finance/financeService', () => ({
   financeService: {
     dashboard: vi.fn(),
-    updateBalance: vi.fn(),
   },
 }));
 
@@ -124,7 +123,7 @@ describe('DashboardPage', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: 'Pendiente de aportación mensual',
+        name: 'Pendiente de confirmar saldos',
       }),
     ).toBeInTheDocument();
     expect(screen.getByText(/prevista para el día 10/i)).toBeInTheDocument();
@@ -141,7 +140,7 @@ describe('DashboardPage', () => {
     expect(within(contribution).getByText('Total a aportar')).toBeInTheDocument();
   });
 
-  it('pide preparar el mes después del día habitual sin convertirlo en alarma', async () => {
+  it('pide confirmar los saldos después del día habitual sin convertirlo en alarma', async () => {
     financeService.dashboard.mockResolvedValue(
       dashboardData({ calculationDate: '2026-09-12' }),
     );
@@ -149,10 +148,10 @@ describe('DashboardPage', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: 'Pendiente de preparar septiembre de 2026',
+        name: 'Confirma los saldos de septiembre de 2026',
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Confirma el saldo actual/i)).toBeInTheDocument();
+    expect(screen.getByText(/Introduce el saldo conjunto/i)).toBeInTheDocument();
     expect(screen.queryByText('Déficit detectado')).not.toBeInTheDocument();
   });
 

@@ -48,6 +48,9 @@ describe('PlanningPage', () => {
       activeRecoveryPlan: { id: 'recovery-1', monthlyAdjustmentCents: 4_000 },
       balanceCents: 90_000,
       budget: {
+        contributions: [
+          { personId: 'person-1', personName: 'Pablo' },
+        ],
         readiness: { ready: true },
         recommendedBudgetCents: 100_000,
       },
@@ -90,7 +93,32 @@ describe('PlanningPage', () => {
     expect(within(contribution).getByText('Total a aportar')).toBeInTheDocument();
     expect(within(contribution).getByText(/^520,00/)).toBeInTheDocument();
 
-    expect(screen.getByText('Total al preparar')).toBeInTheDocument();
+    expect(screen.getByText('Total calculado')).toBeInTheDocument();
     expect(screen.getByText(/^1040,00/)).toBeInTheDocument();
+  });
+
+  it('no vuelve a pedir los saldos cuando el mes actual ya está confirmado', async () => {
+    mocks.dashboard.mockResolvedValue({
+      balanceCents: 90_000,
+      budget: {
+        contributions: [{ personId: 'person-1', personName: 'Pablo' }],
+        readiness: { ready: true },
+        recommendedBudgetCents: 100_000,
+      },
+      planning: {
+        calculationDate: '2026-09-05',
+        contributions: [],
+        fundingStatus: 'FUNDED',
+        id: 'planning-current',
+        month: 9,
+        year: 2026,
+      },
+      theoreticalReserveCents: 60_000,
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Este mes ya está calculado')).toBeInTheDocument();
+    expect(screen.queryByText('Confirmar saldos del mes')).not.toBeInTheDocument();
   });
 });

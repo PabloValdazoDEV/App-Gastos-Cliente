@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   CalendarClock,
   CircleCheck,
@@ -7,8 +7,6 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react';
-import { useState } from 'react';
-import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
 import { queryKeys } from '../api/queryKeys';
@@ -19,7 +17,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ContributionBreakdown } from '../features/finance/components/ContributionBreakdown';
 import { financeService } from '../features/finance/financeService';
-import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
+import { formatCents, isoDate } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
 
 function getMonthLabel(dateValue) {
@@ -37,77 +35,6 @@ function getMonthLabel(dateValue) {
 function dateDay(dateValue) {
   const match = /\d{4}-\d{2}-(\d{2})/.exec(dateValue ?? '');
   return match ? Number(match[1]) : null;
-}
-
-function BalanceEditor({ householdId, currentBalanceCents }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState('');
-  const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: financeService.updateBalance,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] });
-      setEditing(false);
-      setValue('');
-      toast.success('Saldo conjunto actualizado.');
-    },
-  });
-
-  if (!editing) {
-    return (
-      <button
-        className="mt-3 min-h-11 rounded-xl border border-border-strong px-4 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        onClick={() => setEditing(true)}
-        type="button"
-      >
-        Actualizar saldo
-      </button>
-    );
-  }
-
-  return (
-    <form
-      className="mt-3 flex flex-col gap-2 sm:flex-row"
-      onSubmit={(event) => {
-        event.preventDefault();
-        try {
-          mutation.mutate({ householdId, balanceCents: eurosInputToCents(value) });
-        } catch (error) {
-          toast.error(error.message);
-        }
-      }}
-    >
-      <div>
-        <label className="sr-only" htmlFor="dashboard-balance">Nuevo saldo conjunto</label>
-        <input
-          className="min-h-11 w-full rounded-xl border border-border-strong bg-surface px-3 text-sm focus:border-focus focus:outline-2 focus:outline-focus sm:w-40"
-          id="dashboard-balance"
-          inputMode="decimal"
-          onChange={(event) => setValue(event.target.value)}
-          placeholder={(currentBalanceCents / 100).toFixed(2)}
-          required
-          value={value}
-        />
-      </div>
-      <button
-        className="min-h-11 rounded-xl bg-brand px-4 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60"
-        disabled={mutation.isPending}
-        type="submit"
-      >
-        {mutation.isPending ? 'Guardando…' : 'Guardar saldo'}
-      </button>
-      <button
-        className="min-h-11 rounded-xl px-3 text-sm font-bold text-text-muted"
-        onClick={() => setEditing(false)}
-        type="button"
-      >
-        Cancelar
-      </button>
-      {mutation.isError ? (
-        <p className="text-sm text-red-700" role="alert">{mutation.error.message}</p>
-      ) : null}
-    </form>
-  );
 }
 
 export function DashboardPage() {
@@ -160,6 +87,7 @@ export function DashboardPage() {
         personName: item.personName,
         householdCents: item.standardHouseholdCents,
         personalCents: item.personalExpenseCents,
+        contributionBps: item.contributionBps,
         adjustmentCents: item.temporaryAdjustmentCents,
         totalCents: item.totalRecommendedCents,
       }))
@@ -167,6 +95,7 @@ export function DashboardPage() {
         ...item,
         householdCents: item.standardHouseholdCents,
         personalCents: item.personalExpenseCents,
+        contributionBps: item.contributionBps,
         adjustmentCents: 0,
         totalCents: item.totalStandardCents,
       }));
@@ -218,13 +147,13 @@ export function DashboardPage() {
               <div>
                 <h2 className="font-bold">
                   {beforeContributionDay
-                    ? 'Pendiente de aportación mensual'
-                    : `Pendiente de preparar ${monthLabel.toLocaleLowerCase('es-ES')}`}
+                    ? 'Pendiente de confirmar saldos'
+                    : `Confirma los saldos de ${monthLabel.toLocaleLowerCase('es-ES')}`}
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-text-muted">
                   {beforeContributionDay
-                    ? `La aportación habitual está prevista para el día ${contributionDay}. El presupuesto estándar es una referencia y no interpretamos el saldo como déficit antes de preparar el mes.`
-                    : 'Confirma el saldo actual para preparar el mes. Hasta entonces mostramos el estándar como referencia, sin elevar el estado financiero a una alerta.'}
+                    ? `La confirmación mensual está prevista para el día ${contributionDay}. Necesitamos el saldo conjunto y el saldo personal de cada persona para calcular el estado real.`
+                    : 'Introduce el saldo conjunto y los saldos personales para actualizar las aportaciones y comprobar si las cuentas van bien.'}
                 </p>
               </div>
             </section>
@@ -250,6 +179,7 @@ export function DashboardPage() {
               <div>
                 <dt className="text-xs font-semibold text-on-brand-muted">Gastos comunes</dt>
                 <dd className="mt-1 font-extrabold">{formatCents(householdTotal, currency)}</dd>
+                <dd className="mt-1 text-xs text-on-brand-muted">Incluye {formatCents(data.budget.householdMarginCents, currency)} de margen</dd>
               </div>
               <div>
                 <dt className="text-xs font-semibold text-on-brand-muted">Gastos personales</dt>
@@ -279,6 +209,7 @@ export function DashboardPage() {
                     adjustmentCents={contribution.adjustmentCents}
                     currency={currency}
                     householdCents={contribution.householdCents}
+                    contributionBps={contribution.contributionBps}
                     inverted
                     pendingAdjustment={hasPendingAdjustment}
                     personalCents={contribution.personalCents}
@@ -288,7 +219,7 @@ export function DashboardPage() {
               ))}
             </div>
             {!data.planning ? (
-              <Link className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-on-brand px-4 py-2 text-sm font-bold text-brand-deep" to="/planificacion">Preparar este mes</Link>
+              <Link className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-on-brand px-4 py-2 text-sm font-bold text-brand-deep" to="/planificacion">Confirmar saldos del mes</Link>
             ) : null}
             {data.nextPayment ? (
               <section className="mt-5 border-t border-on-brand/15 pt-5" aria-labelledby="registrar-proximo-pago">
@@ -318,15 +249,37 @@ export function DashboardPage() {
             <div className="mt-4 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
               <MetricCard icon={CircleGauge} label="Presupuesto hogar" value={formatCents(data.budget.householdBudgetCents, currency)} />
               <MetricCard helper={data.nextPayment ? isoDate(data.nextPayment.dueDate) : 'Sin pagos próximos'} icon={CalendarClock} label="Próximo pago" value={data.nextPayment ? formatCents(data.nextPayment.amountCents, currency) : '—'} />
-              <MetricCard helper={!hasPlanning ? 'Pendiente de confirmar al preparar el mes' : undefined} icon={Landmark} label="Saldo conjunto" value={formatCents(data.balanceCents, currency)} />
+              <MetricCard helper={!hasPlanning ? 'Pendiente de confirmar los saldos' : undefined} icon={Landmark} label="Saldo conjunto" value={formatCents(data.balanceCents, currency)} />
             </div>
-            <BalanceEditor currentBalanceCents={data.balanceCents} householdId={householdId} />
+            <Link className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-border-strong px-4 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft" to="/cuentas">
+              {data.accountSummary?.hasAccounts ? 'Editar cuentas y saldos' : 'Configurar cuentas y saldos'}
+            </Link>
           </section>
+
+          {data.accountSummary?.hasAccounts ? (
+            <section aria-labelledby="estado-cuentas" className="rounded-2xl border border-border bg-surface p-5 shadow-card">
+              <h2 className="font-bold text-text" id="estado-cuentas">Estado de las cuentas</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <article className="rounded-xl bg-surface-muted p-4">
+                  <p className="text-sm font-bold text-text">Cuenta conjunta</p>
+                  <p className="mt-1 text-sm text-text-muted">Disponible {formatCents(data.accountSummary.common.balanceCents, currency)} · Necesario {formatCents(data.accountSummary.common.requiredCents, currency)}</p>
+                  <p className={`mt-2 text-sm font-extrabold ${data.accountSummary.common.status === 'OK' ? 'text-brand-strong' : 'text-red-700'}`}>{data.accountSummary.common.status === 'OK' ? 'Va bien' : 'En números rojos'} ({formatCents(data.accountSummary.common.differenceCents, currency)})</p>
+                </article>
+                {data.accountSummary.personal.map((account) => (
+                  <article className="rounded-xl bg-surface-muted p-4" key={account.personId}>
+                    <p className="text-sm font-bold text-text">Cuenta de {account.personName}</p>
+                    <p className="mt-1 text-sm text-text-muted">Disponible {formatCents(account.balanceCents, currency)} · Aportación necesaria {formatCents(account.requiredCents, currency)}</p>
+                    <p className={`mt-2 text-sm font-extrabold ${account.status === 'OK' ? 'text-brand-strong' : 'text-red-700'}`}>{account.status === 'OK' ? 'Va bien' : 'En números rojos'} ({formatCents(account.differenceCents, currency)})</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="rounded-2xl border border-border bg-surface p-5">
             <h2 className="font-bold text-text">Cómo se ha calculado</h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              {data.budget.sourceCoverage.recurringCount} gastos recurrentes, {data.budget.sourceCoverage.invoiceCategoryCount} categorías con facturas y {data.budget.sourceCoverage.variableCategoryCount} grupos de gasto variable. Margen general: {data.household.safetyMarginBps / 100} %.
+              {data.budget.sourceCoverage.recurringCount} gastos recurrentes, {data.budget.sourceCoverage.invoiceCategoryCount} categorías con facturas, {data.budget.sourceCoverage.variableCategoryCount} grupos variables y {data.budget.sourceCoverage.oneTimeCount ?? 0} gastos puntuales. Margen general: {data.household.safetyMarginBps === 0 ? 'sin margen' : `${data.household.safetyMarginBps / 100} %`}.
             </p>
             <Link className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-brand-strong" to="/presupuesto">Ver desglose del presupuesto</Link>
           </section>

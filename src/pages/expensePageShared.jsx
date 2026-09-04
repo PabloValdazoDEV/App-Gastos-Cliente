@@ -1,4 +1,4 @@
-import { TriangleAlert, WalletCards, X } from 'lucide-react';
+import { Search, TriangleAlert, WalletCards, X } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 
 import { EmptyState } from '../components/ui/EmptyState';
@@ -30,6 +30,44 @@ export function SelectField({ children, error, label, name, ...props }) {
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+export function ExpenseFilters({
+  categories = [],
+  categoryId,
+  onCategoryChange,
+  onScopeChange,
+  onSearchChange,
+  search,
+  scope = 'ALL',
+}) {
+  return (
+    <div className="grid min-w-0 gap-3 rounded-2xl border border-border bg-surface p-4 shadow-card sm:items-end sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+      <label className="relative block min-w-0">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 size-4 text-text-soft" />
+        <span className="sr-only">Buscar gastos</span>
+        <input
+          className="min-h-11 w-full min-w-0 rounded-xl border border-border-strong bg-surface pl-10 pr-3 text-sm text-text outline-none focus:border-focus focus:ring-2 focus:ring-focus/20"
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Buscar por nombre, categoría o nota"
+          value={search}
+        />
+      </label>
+      <SelectField label="Tipo" onChange={(event) => onScopeChange(event.target.value)} value={scope}>
+        <option value="ALL">Todos</option>
+        <option value="HOUSEHOLD">Comunes</option>
+        <option value="PERSONAL">Personales</option>
+      </SelectField>
+      <SelectField label="Categoría" onChange={(event) => onCategoryChange(event.target.value)} value={categoryId}>
+        <option value="ALL">Todas</option>
+        {categories.map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.name}
+          </option>
+        ))}
+      </SelectField>
     </div>
   );
 }

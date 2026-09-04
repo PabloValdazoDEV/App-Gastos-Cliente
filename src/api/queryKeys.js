@@ -63,6 +63,8 @@ export const queryKeys = Object.freeze({
       expenseId,
     ],
   },
+  oneTimeExpenses: (householdId) => ['oneTimeExpenses', householdId],
+  accounts: (householdId) => ['accounts', householdId],
   monthlyPlanning: {
     all: (householdId) => ['monthlyPlanning', householdId],
     detail: (householdId, period) => [

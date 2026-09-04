@@ -150,7 +150,7 @@ export function AppLayout() {
   }, [activeDestination, location.pathname]);
 
   return (
-    <div className="min-h-dvh bg-background text-text">
+    <div className="min-h-dvh bg-background text-text ">
       <a
         className="fixed left-3 top-3 z-50 -translate-y-24 rounded-lg bg-brand px-4 py-3 text-sm font-bold text-on-brand shadow-lg transition-transform focus:translate-y-0 focus:outline-2 focus:outline-offset-2 focus:outline-focus"
         href="#contenido-principal"
@@ -173,16 +173,7 @@ export function AppLayout() {
             </span>
           </Link>
 
-          <nav aria-label="Navegación principal" className="space-y-1.5">
-            <NavigationItems pathname={location.pathname} />
-          </nav>
-
-          <div className="mt-4 space-y-1.5 border-t border-border pt-4">
-            <NotificationBell />
-            <LogoutButton />
-          </div>
-
-          <div className="mt-auto rounded-2xl border border-border bg-surface-muted p-4">
+          <div className="mb-6 rounded-2xl border border-border bg-surface-muted p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-text-soft">
               Hogar actual
             </p>
@@ -206,6 +197,16 @@ export function AppLayout() {
               {currentHousehold ? 'Gestionar hogar' : 'Crear hogar'}
             </Link>
           </div>
+
+          <nav aria-label="Navegación principal" className="space-y-1.5">
+            <NavigationItems pathname={location.pathname} />
+          </nav>
+
+          <div className="mt-4 space-y-1.5 border-t border-border pt-4">
+            <NotificationBell />
+            <LogoutButton />
+          </div>
+
         </aside>
 
         <div className="min-w-0">
@@ -234,7 +235,7 @@ export function AppLayout() {
           </header>
 
           <main
-            className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 sm:pt-8 md:px-8 md:pb-12 lg:px-10"
+            className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 focus:outline-none sm:px-6 sm:pt-8 md:px-8 md:pb-12 lg:px-10"
             id="contenido-principal"
             ref={mainRef}
             tabIndex="-1"
@@ -248,7 +249,7 @@ export function AppLayout() {
         aria-label="Navegación principal móvil"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_28px_rgba(22,35,29,0.08)] backdrop-blur md:hidden"
       >
-        <div className="mx-auto flex max-w-xl gap-1">
+        <div className="mx-auto flex max-w-xl gap-1 pb-2">
           <NavigationItems mobile pathname={location.pathname} />
         </div>
       </nav>

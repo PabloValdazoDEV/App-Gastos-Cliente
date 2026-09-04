@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, CalendarDays, ListPlus, Pencil, Plus, ShoppingBasket, Trash2, UserRound, UsersRound } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
@@ -21,6 +21,7 @@ import { useHousehold } from '../features/households/useHousehold';
 import {
   FormCard,
   ConfirmationDialog,
+  ExpenseFilters,
   HouseholdGate,
   SelectField,
   TextareaField,
@@ -547,6 +548,9 @@ export function VariableExpensesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingMonthId, setEditingMonthId] = useState(null);
   const [deletingMonthId, setDeletingMonthId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
   const months = useQuery({
     enabled: Boolean(householdId),
     queryFn: () => financeService.variableExpenses(householdId),
@@ -585,6 +589,20 @@ export function VariableExpensesPage() {
     },
   });
   const monthToDelete = months.data?.find((item) => item.id === deletingMonthId);
+  const filteredMonths = useMemo(() => {
+    const normalized = search.trim().toLocaleLowerCase('es');
+    return (months.data ?? []).filter((item) => {
+      const matchesSearch = !normalized || [
+        item.category?.name,
+        item.notes,
+        item.personalPerson?.name,
+        formatMonth(item.year, item.month),
+      ].some((value) => String(value ?? '').toLocaleLowerCase('es').includes(normalized));
+      return matchesSearch &&
+        (scopeFilter === 'ALL' || item.scope === scopeFilter) &&
+        (categoryFilter === 'ALL' || item.categoryId === categoryFilter);
+    });
+  }, [categoryFilter, months.data, scopeFilter, search]);
 
   return (
     <div className="space-y-8">
@@ -689,8 +707,20 @@ export function VariableExpensesPage() {
             <h2 className="text-xl font-extrabold tracking-tight" id="historico-variables">
               Meses registrados
             </h2>
+            <div className="mt-4">
+              <ExpenseFilters
+                categories={categories}
+                categoryId={categoryFilter}
+                onCategoryChange={setCategoryFilter}
+                onScopeChange={setScopeFilter}
+                onSearchChange={setSearch}
+                scope={scopeFilter}
+                search={search}
+              />
+            </div>
+            {filteredMonths.length === 0 ? <p className="mt-4 rounded-2xl border border-dashed border-border-strong p-6 text-center text-sm text-text-muted">No hay meses que coincidan con los filtros.</p> : null}
             <ul className="mt-4 space-y-3">
-              {months.data.map((item) => {
+              {filteredMonths.map((item) => {
                 const isEditing = editingMonthId === item.id;
 
                 return (
@@ -717,10 +747,10 @@ export function VariableExpensesPage() {
                       <p className="text-xl font-extrabold text-text">
                         {formatCents(totalForMonth(item), currency)}
                       </p>
-                      <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                         <button
                           aria-label={`Editar gasto de ${item.category?.name ?? 'esta categoría'} de ${formatMonth(item.year, item.month)}`}
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setShowForm(false);
                             setDeletingMonthId(null);
@@ -733,7 +763,7 @@ export function VariableExpensesPage() {
                         </button>
                         <button
                           aria-label={`Eliminar gasto de ${item.category?.name ?? 'esta categoría'} de ${formatMonth(item.year, item.month)}`}
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60"
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-300 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-3"
                           disabled={deleteMonth.isPending}
                           onClick={() => {
                             deleteMonth.reset();

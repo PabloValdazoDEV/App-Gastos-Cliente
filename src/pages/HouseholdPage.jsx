@@ -9,6 +9,7 @@ import {
   UserPlus,
   UsersRound,
   WalletCards,
+  Trash2,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -24,9 +25,9 @@ import {
 import { PageHeader } from '../components/ui/PageHeader';
 import { AuthError } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
-import { eurosInputToCents, formatCents } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
+import { ConfirmationDialog } from './expensePageShared';
 
 const primaryButton =
   'inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-extrabold text-on-brand shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
@@ -65,10 +66,6 @@ function percentToBps(value) {
 function bpsToPercent(value) {
   if (!Number.isInteger(value)) return '0';
   return String(value / 100).replace('.', ',');
-}
-
-function centsToInput(value) {
-  return Number.isInteger(value) ? (value / 100).toFixed(2).replace('.', ',') : '';
 }
 
 function formatDate(value) {
@@ -214,12 +211,14 @@ function HouseholdSummary({ household }) {
         </div>
         <div className="rounded-2xl bg-on-brand/10 p-4">
           <dt className="text-xs font-semibold text-on-brand-muted">Margen general</dt>
-          <dd className="mt-1 font-extrabold">{household.safetyMarginBps / 100} %</dd>
+          <dd className="mt-1 font-extrabold">
+            {household.safetyMarginBps === 0 ? 'Sin margen' : `${household.safetyMarginBps / 100} %`}
+          </dd>
         </div>
         <div className="rounded-2xl bg-on-brand/10 p-4">
           <dt className="text-xs font-semibold text-on-brand-muted">Tipo de reparto</dt>
           <dd className="mt-1 font-extrabold">
-            {household.contributionMode === 'FIXED' ? 'Cantidad fija' : 'Porcentaje'}
+            {household.contributionMode === 'FIXED' ? 'Porcentaje pendiente de revisar' : 'Porcentaje'}
           </dd>
         </div>
         <div className="rounded-2xl bg-on-brand/10 p-4">
@@ -235,6 +234,7 @@ function HouseholdSettings({ household, canManage }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(household.name);
   const [margin, setMargin] = useState(bpsToPercent(household.safetyMarginBps));
+  const [withoutMargin, setWithoutMargin] = useState(household.safetyMarginBps === 0);
   const [contributionDay, setContributionDay] = useState(
     String(household.contributionDay ?? 1),
   );
@@ -259,6 +259,7 @@ function HouseholdSettings({ household, canManage }) {
   useEffect(() => {
     setName(household.name);
     setMargin(bpsToPercent(household.safetyMarginBps));
+    setWithoutMargin(household.safetyMarginBps === 0);
     setContributionDay(String(household.contributionDay ?? 1));
     setValidationError('');
     setContributionDayError('');
@@ -274,7 +275,7 @@ function HouseholdSettings({ household, canManage }) {
   function handleSubmit(event) {
     event.preventDefault();
     try {
-      const safetyMarginBps = percentToBps(margin);
+      const safetyMarginBps = withoutMargin ? 0 : percentToBps(margin);
       const parsedContributionDay = Number(contributionDay);
 
       if (
@@ -329,9 +330,21 @@ function HouseholdSettings({ household, canManage }) {
           name="settingsMargin"
           onChange={(event) => setMargin(event.target.value)}
           placeholder="10"
-          required
+          required={!withoutMargin}
           value={margin}
         />
+        <label className="flex min-h-12 items-start gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm text-text sm:col-span-2">
+          <input
+            checked={withoutMargin}
+            className="mt-0.5 size-4 accent-brand"
+            onChange={(event) => setWithoutMargin(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            <span className="block font-bold">Sin margen de seguridad</span>
+            <span className="mt-0.5 block text-xs leading-5 text-text-muted">El presupuesto usará exactamente el importe previsto.</span>
+          </span>
+        </label>
         <FormField
           error={contributionDayError}
           help="Antes de este día, un mes sin preparar se mostrará como pendiente, no como déficit."
@@ -369,13 +382,12 @@ function buildDistributionDraft(people) {
     active: person.isActive,
     contributionBps: person.contributionBps,
     percentage: bpsToPercent(person.contributionBps),
-    fixedAmount: centsToInput(person.fixedContributionCents),
   }));
 }
 
 function DistributionEditor({ householdId, initialMode, people, canManage }) {
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState(initialMode);
+  const [mode, setMode] = useState('PERCENTAGE');
   const [draft, setDraft] = useState(() => buildDistributionDraft(people));
   const [validationError, setValidationError] = useState('');
   const mutation = useMutation({
@@ -392,7 +404,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
   });
 
   useEffect(() => {
-    setMode(initialMode);
+    setMode('PERCENTAGE');
     setDraft(buildDistributionDraft(people));
     setValidationError('');
   }, [initialMode, people]);
@@ -430,11 +442,6 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
           };
         }
 
-        return {
-          personId: person.id,
-          isActive: person.active,
-          fixedContributionCents: eurosInputToCents(person.fixedAmount || '0'),
-        };
       });
       const activeUpdates = updates.filter((person) => person.isActive);
 
@@ -474,11 +481,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-bold text-text">{person.name}</p>
               <span className="text-sm font-semibold text-text-muted">
-                {person.isActive
-                  ? initialMode === 'FIXED'
-                    ? formatCents(person.fixedContributionCents)
-                    : `${person.contributionBps / 100} %`
-                  : 'No participa'}
+                {person.isActive ? `${person.contributionBps / 100} %` : 'No participa'}
               </span>
             </div>
           </li>
@@ -493,14 +496,11 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
         <legend className="text-sm font-bold text-text">Forma de repartir</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {[
-            ['PERCENTAGE', 'Porcentaje', 'Las personas activas deben sumar 100 %.', false],
-            ['FIXED', 'Cantidad fija', 'Preparado en el modelo de datos; disponible en una versión futura.', true],
-          ].map(([value, label, description, disabled]) => (
+            ['PERCENTAGE', 'Porcentaje', 'Las personas activas deben sumar 100 %.'],
+          ].map(([value, label, description]) => (
             <label
               className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border p-4 ${
-                disabled
-                  ? 'cursor-not-allowed border-border bg-surface-muted opacity-70'
-                  : mode === value
+                mode === value
                   ? 'border-brand bg-brand-soft'
                   : 'border-border-strong bg-surface'
               }`}
@@ -509,7 +509,6 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
               <input
                 checked={mode === value}
                 className="mt-1 size-4 accent-brand"
-                disabled={disabled}
                 name="contributionMode"
                 onChange={() => setMode(value)}
                 type="radio"
@@ -525,12 +524,6 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
           ))}
         </div>
       </fieldset>
-
-      {mode === 'FIXED' ? (
-        <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-          Cambia a porcentaje para que el presupuesto mensual pueda calcularse en esta versión.
-        </p>
-      ) : null}
 
       <ul className="mt-5 space-y-3">
         {draft.map((person) => (
@@ -560,7 +553,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
                   className="mb-1.5 block text-sm font-bold text-text"
                   htmlFor={`contribution-${person.id}`}
                 >
-                  {mode === 'PERCENTAGE' ? 'Porcentaje (%)' : 'Aportación fija (€)'}
+                  Porcentaje (%)
                   <span className="sr-only"> de {person.name}</span>
                 </label>
                 <input
@@ -571,11 +564,11 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
                   onChange={(event) =>
                     changePerson(
                       person.id,
-                      mode === 'PERCENTAGE' ? 'percentage' : 'fixedAmount',
+                      'percentage',
                       event.target.value,
                     )
                   }
-                  value={mode === 'PERCENTAGE' ? person.percentage : person.fixedAmount}
+                  value={person.percentage}
                 />
               </div>
             </div>
@@ -598,7 +591,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
         </p>
         <button
           className={primaryButton}
-          disabled={mutation.isPending || mode === 'FIXED'}
+          disabled={mutation.isPending}
           type="submit"
         >
           <WalletCards aria-hidden="true" className="size-5" />
@@ -714,7 +707,11 @@ function InvitationForm({ household, people }) {
       setEmail('');
       setPersonId('');
       setValidationError('');
-      toast.success('Invitación creada.');
+      toast.success(
+        result.emailSent
+          ? 'Invitación creada y enviada por correo.'
+          : 'Invitación creada. Copia el enlace para compartirlo.',
+      );
     },
   });
 
@@ -873,6 +870,20 @@ function InvitationForm({ household, people }) {
 }
 
 function InvitationsSection({ household, people, query, canManage }) {
+  const queryClient = useQueryClient();
+  const [revokingInvitationId, setRevokingInvitationId] = useState(null);
+  const revokeMutation = useMutation({
+    mutationFn: householdService.revokeInvitation,
+    onError: () => setRevokingInvitationId(null),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.households.detail(household.id), 'invitations'],
+      });
+      setRevokingInvitationId(null);
+      toast.success('Invitación cancelada.');
+    },
+  });
+
   if (!canManage) {
     return (
       <RestrictedState
@@ -928,14 +939,49 @@ function InvitationsSection({ household, people, query, canManage }) {
                     {roleLabels[invitation.role]} · Caduca {formatDate(invitation.expiresAt)}
                   </p>
                 </div>
-                <span className="self-start rounded-full bg-surface px-2.5 py-1 text-xs font-bold text-text-muted sm:self-auto">
-                  {invitationStatusLabels[invitation.status] ?? invitation.status}
-                </span>
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-bold text-text-muted">
+                    {invitationStatusLabels[invitation.status] ?? invitation.status}
+                  </span>
+                  {invitation.status === 'PENDING' ? (
+                    <button
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
+                      onClick={() => {
+                        revokeMutation.reset();
+                        setRevokingInvitationId(invitation.id);
+                      }}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" className="size-4" />
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
         ) : null}
+        {revokeMutation.error ? (
+          <div className="mt-3">
+            <AuthError error={revokeMutation.error} />
+          </div>
+        ) : null}
       </div>
+      {revokingInvitationId ? (
+        <ConfirmationDialog
+          cancelLabel="No, mantenerla"
+          confirmLabel="Cancelar invitación"
+          description="El enlace dejará de funcionar y la persona invitada ya no podrá utilizarlo. Esta acción no elimina a nadie del hogar."
+          isPending={revokeMutation.isPending}
+          onCancel={() => setRevokingInvitationId(null)}
+          onConfirm={() => revokeMutation.mutate({
+            householdId: household.id,
+            invitationId: revokingInvitationId,
+          })}
+          pendingLabel="Cancelando…"
+          title="¿Cancelar esta invitación?"
+        />
+      ) : null}
     </section>
   );
 }

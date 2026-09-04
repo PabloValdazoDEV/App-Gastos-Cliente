@@ -78,6 +78,23 @@ export const financeService = {
   deleteVariableMonth: ({ householdId, variableMonthId }) =>
     http.delete(`${home(householdId)}/variable-expenses/${variableMonthId}`),
 
+  oneTimeExpenses: (householdId) =>
+    http.get(`${home(householdId)}/one-time-expenses`),
+  createOneTimeExpense: ({ householdId, body }) =>
+    http.post(`${home(householdId)}/one-time-expenses`, body),
+  updateOneTimeExpense: ({ householdId, expenseId, body }) =>
+    http.patch(`${home(householdId)}/one-time-expenses/${expenseId}`, body),
+  deleteOneTimeExpense: ({ householdId, expenseId }) =>
+    http.delete(`${home(householdId)}/one-time-expenses/${expenseId}`),
+
+  accounts: (householdId) => http.get(`${home(householdId)}/accounts`),
+  createAccount: ({ householdId, body }) =>
+    http.post(`${home(householdId)}/accounts`, body),
+  updateAccount: ({ householdId, accountId, body }) =>
+    http.patch(`${home(householdId)}/accounts/${accountId}`, body),
+  deleteAccount: ({ householdId, accountId }) =>
+    http.delete(`${home(householdId)}/accounts/${accountId}`),
+
   calendar: (householdId, view = '30_DAYS') =>
     http.get(`${home(householdId)}/calendar`, { params: { view } }),
   plannings: (householdId) => http.get(`${home(householdId)}/plannings`),

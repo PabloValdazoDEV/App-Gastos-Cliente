@@ -19,7 +19,6 @@ import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
 import { publicEnv } from '../config/env';
 import { AuthError } from '../features/auth/components/AuthFeedback';
-import { FormField } from '../features/auth/components/FormField';
 import { notificationService } from '../features/notifications/notificationService';
 
 const preferenceQueryKey = ['notificationPreferences'];
@@ -45,6 +44,12 @@ const deliveryLabels = Object.freeze({
   WEB_PUSH: 'Aviso web',
 });
 
+const reminderOffsetOptions = Object.freeze([
+  { days: 30, label: '30 días antes', description: 'Para tenerlo previsto con tiempo.' },
+  { days: 7, label: '7 días antes', description: 'Para organizar la semana.' },
+  { days: 1, label: '1 día antes', description: 'Para recordarlo justo antes.' },
+]);
+
 function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Fecha no disponible';
@@ -53,31 +58,6 @@ function formatDateTime(value) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date);
-}
-
-function parseOffsets(value) {
-  const parts = String(value)
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length === 0 || parts.length > 20) {
-    throw new Error('Indica entre 1 y 20 avisos separados por comas.');
-  }
-
-  const offsets = parts.map((part) => {
-    if (!/^\d{1,3}$/.test(part)) {
-      throw new Error('Usa días enteros separados por comas, por ejemplo: 30, 7, 1.');
-    }
-
-    const offset = Number(part);
-    if (offset < 0 || offset > 365) {
-      throw new Error('Cada aviso debe estar entre 0 y 365 días antes.');
-    }
-    return offset;
-  });
-
-  return [...new Set(offsets)].sort((left, right) => right - left);
 }
 
 function safeRelatedPath(value) {
@@ -463,7 +443,7 @@ function PreferenceOption({ checked, description, disabled, icon: Icon, label, o
 function NotificationPreferences({ query }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
-    defaultOffsets: '30, 7, 1',
+    defaultOffsets: [30, 7, 1],
     emailEnabled: true,
     inAppEnabled: true,
     webPushEnabled: false,
@@ -481,7 +461,7 @@ function NotificationPreferences({ query }) {
   useEffect(() => {
     if (!query.data) return;
     setForm({
-      defaultOffsets: query.data.defaultOffsets.join(', '),
+      defaultOffsets: query.data.defaultOffsets,
       emailEnabled: query.data.emailEnabled,
       inAppEnabled: query.data.inAppEnabled,
       webPushEnabled: query.data.webPushEnabled,
@@ -520,20 +500,34 @@ function NotificationPreferences({ query }) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function toggleReminderOffset(days, checked) {
+    setForm((current) => {
+      const nextOffsets = checked
+        ? [...current.defaultOffsets, days]
+        : current.defaultOffsets.filter((offset) => offset !== days);
+
+      return {
+        ...current,
+        defaultOffsets: [...new Set(nextOffsets)].sort((left, right) => right - left),
+      };
+    });
+    setValidationError('');
+  }
+
   function handleSubmit(event) {
     event.preventDefault();
-    try {
-      const defaultOffsets = parseOffsets(form.defaultOffsets);
-      setValidationError('');
-      mutation.mutate({
-        defaultOffsets,
-        emailEnabled: form.emailEnabled,
-        inAppEnabled: form.inAppEnabled,
-        webPushEnabled: form.webPushEnabled,
-      });
-    } catch (error) {
-      setValidationError(error.message);
+    if (form.defaultOffsets.length === 0) {
+      setValidationError('Selecciona al menos un momento para recibir el aviso.');
+      return;
     }
+
+    setValidationError('');
+    mutation.mutate({
+      defaultOffsets: form.defaultOffsets,
+      emailEnabled: form.emailEnabled,
+      inAppEnabled: form.inAppEnabled,
+      webPushEnabled: form.webPushEnabled,
+    });
   }
 
   return (
@@ -572,19 +566,47 @@ function NotificationPreferences({ query }) {
           </div>
         </fieldset>
 
-        <div className="mt-5 max-w-md">
-          <FormField
-            error={validationError}
-            help="Días antes del vencimiento, separados por comas. Usa 0 para avisar el mismo día."
-            inputMode="numeric"
-            label="Antelación predeterminada"
-            name="defaultOffsets"
-            onChange={(event) => updateField('defaultOffsets', event.target.value)}
-            placeholder="30, 7, 1"
-            required
-            value={form.defaultOffsets}
-          />
-        </div>
+        <fieldset className="mt-5">
+          <legend className="text-sm font-bold text-text">Cuándo quieres recibir los avisos</legend>
+          <p className="mt-1 text-sm leading-6 text-text-muted">
+            Puedes elegir uno, dos o los tres momentos.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {reminderOffsetOptions.map(({ days, description, label }) => {
+              const checked = form.defaultOffsets.includes(days);
+              const onlySelected = checked && form.defaultOffsets.length === 1;
+
+              return (
+                <label
+                  className={`flex min-h-24 items-start gap-3 rounded-2xl border p-4 ${
+                    checked
+                      ? 'cursor-pointer border-brand/40 bg-brand-soft'
+                      : 'cursor-pointer border-border-strong bg-surface'
+                  }`}
+                  key={days}
+                >
+                  <input
+                    aria-label={label}
+                    checked={checked}
+                    className="mt-1 size-5 rounded accent-brand"
+                    disabled={onlySelected}
+                    onChange={(event) => toggleReminderOffset(days, event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-bold text-text">{label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-text-muted">{description}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {validationError ? (
+            <p className="mt-2 text-sm font-medium text-red-700" role="alert">
+              {validationError}
+            </p>
+          ) : null}
+        </fieldset>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
           <button className={primaryButton} disabled={mutation.isPending} type="submit">

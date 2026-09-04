@@ -26,4 +26,6 @@ export const householdService = {
     http.get(`/households/${householdId}/invitations`),
   invite: ({ householdId, body }) =>
     http.post(`/households/${householdId}/invitations`, body),
+  revokeInvitation: ({ householdId, invitationId }) =>
+    http.delete(`/households/${householdId}/invitations/${invitationId}`),
 };

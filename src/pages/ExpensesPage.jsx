@@ -1,4 +1,4 @@
-import { CalendarRange, ReceiptText, ShoppingBasket } from 'lucide-react';
+import { CalendarRange, Receipt, ReceiptText, ShoppingBasket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader';
@@ -22,6 +22,12 @@ const expenseTypes = [
     title: 'Variables',
     to: '/gastos/variables',
   },
+  {
+    description: 'Compras o pagos excepcionales que solo ocurren una vez.',
+    icon: Receipt,
+    title: 'Puntuales',
+    to: '/gastos/puntuales',
+  },
 ];
 
 export function ExpensesPage() {
@@ -35,7 +41,7 @@ export function ExpensesPage() {
         <h2 className="text-lg font-bold text-text" id="tipos-gasto">
           Datos que necesitarás
         </h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {expenseTypes.map(({ description, icon: Icon, title, to }) => (
             <Link
               className="rounded-2xl border border-border bg-surface p-5 shadow-card transition-colors hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"

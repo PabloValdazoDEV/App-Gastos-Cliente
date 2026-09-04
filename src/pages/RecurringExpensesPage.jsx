@@ -11,7 +11,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -33,6 +33,7 @@ import { CategoryIconBadge } from '../features/households/categoryIcons';
 import {
   FormCard,
   ConfirmationDialog,
+  ExpenseFilters,
   HouseholdGate,
   SelectField,
   TextareaField,
@@ -69,6 +70,7 @@ const recurringSchema = z
     marginMode: z.enum(['GENERAL', 'SPECIFIC']),
     safetyMargin: z.string().optional(),
     remindersEnabled: z.boolean(),
+    withoutMargin: z.boolean(),
     notes: z.string().trim().max(2_000, 'Las notas son demasiado largas.').optional(),
   })
   .superRefine((values, context) => {
@@ -103,7 +105,7 @@ const recurringSchema = z
         path: ['nextDueDate'],
       });
     }
-    if (values.marginMode === 'SPECIFIC') {
+    if (values.marginMode === 'SPECIFIC' && !values.withoutMargin) {
       const normalized = String(values.safetyMargin ?? '').trim().replace(',', '.');
       const percent = Number(normalized);
       if (
@@ -386,12 +388,14 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
       safetyMargin: bpsForInput(initialExpense?.safetyMarginOverrideBps),
       scope: initialExpense?.scope ?? 'HOUSEHOLD',
       startDate: isoDate(initialExpense?.startDate) || todayIso(),
+      withoutMargin: initialExpense?.safetyMarginOverrideBps === 0,
     },
     resolver: zodResolver(recurringSchema),
   });
   const scope = watch('scope');
   const frequency = watch('frequency');
   const marginMode = watch('marginMode');
+  const withoutMargin = watch('withoutMargin');
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -411,7 +415,9 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
           personalPersonId: values.scope === 'PERSONAL' ? values.personalPersonId : null,
           remindersEnabled: values.remindersEnabled,
           safetyMarginOverrideBps:
-            values.marginMode === 'SPECIFIC'
+            values.withoutMargin
+              ? 0
+              : values.marginMode === 'SPECIFIC'
               ? marginInputToBps(values.safetyMargin)
               : null,
           scope: values.scope,
@@ -573,7 +579,7 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
             </div>
           </fieldset>
 
-          {marginMode === 'SPECIFIC' ? (
+          {marginMode === 'SPECIFIC' && !withoutMargin ? (
             <FormField
               error={errors.safetyMargin?.message}
               help="Admite valores entre 0 y 100, con hasta dos decimales."
@@ -583,6 +589,14 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
               {...register('safetyMargin')}
             />
           ) : null}
+
+          <label className="flex min-h-11 items-start gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm text-text">
+            <input className="mt-0.5 size-4 accent-brand" type="checkbox" {...register('withoutMargin')} />
+            <span>
+              <span className="block font-bold">Sin margen para este gasto</span>
+              <span className="mt-0.5 block text-xs leading-5 text-text-muted">Ignora el margen de la categoría y el margen general.</span>
+            </span>
+          </label>
 
           <label className="flex min-h-11 items-center gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm font-semibold text-text">
             <input className="size-4 accent-brand" type="checkbox" {...register('remindersEnabled')} />
@@ -618,6 +632,9 @@ export function RecurringExpensesPage() {
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState(routeExpenseId ?? null);
+  const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
   const expenses = useQuery({
     enabled: Boolean(householdId),
     queryFn: () => financeService.recurring(householdId),
@@ -656,6 +673,20 @@ export function RecurringExpensesPage() {
   const routeExpenseMissing = Boolean(routeExpenseId && expenses.isSuccess && !routeExpenseFound);
   const shouldRegisterRoutePayment = searchParams.get('action') === 'register-payment';
   const expenseToDelete = expenses.data?.find((expense) => expense.id === deletingExpenseId);
+  const filteredExpenses = useMemo(() => {
+    const normalized = search.trim().toLocaleLowerCase('es');
+    return (expenses.data ?? []).filter((expense) => {
+      const matchesSearch = !normalized || [
+        expense.name,
+        expense.category?.name,
+        expense.notes,
+        expense.personalPerson?.name,
+      ].some((value) => String(value ?? '').toLocaleLowerCase('es').includes(normalized));
+      return matchesSearch &&
+        (scopeFilter === 'ALL' || expense.scope === scopeFilter) &&
+        (categoryFilter === 'ALL' || expense.categoryId === categoryFilter);
+    });
+  }, [categoryFilter, expenses.data, scopeFilter, search]);
 
   useEffect(() => {
     if (routeExpenseId) setExpandedExpenseId(routeExpenseId);
@@ -780,8 +811,24 @@ export function RecurringExpensesPage() {
             <h2 className="text-xl font-extrabold tracking-tight" id="listado-recurrentes">
               Todos los gastos recurrentes
             </h2>
+            <div className="mt-4">
+              <ExpenseFilters
+                categories={categories}
+                categoryId={categoryFilter}
+                onCategoryChange={setCategoryFilter}
+                onScopeChange={setScopeFilter}
+                onSearchChange={setSearch}
+                scope={scopeFilter}
+                search={search}
+              />
+            </div>
+            {filteredExpenses.length === 0 ? (
+              <p className="mt-4 rounded-2xl border border-dashed border-border-strong p-6 text-center text-sm text-text-muted">
+                No hay gastos que coincidan con los filtros.
+              </p>
+            ) : null}
             <ul className="mt-4 space-y-3">
-              {expenses.data.map((expense) => {
+              {filteredExpenses.map((expense) => {
                 const isLinkedExpense = routeExpenseId === expense.id;
                 const isExpanded = expandedExpenseId === expense.id;
                 const isEditing = editingExpenseId === expense.id;
@@ -829,9 +876,9 @@ export function RecurringExpensesPage() {
                           ? `Margen propio: ${expense.safetyMarginOverrideBps / 100} %`
                           : 'Margen heredado'}
                       </p>
-                      <div className="mt-3 flex flex-col gap-2 min-[430px]:flex-row sm:justify-end">
+                      <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                         <button
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-brand px-3 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-brand px-2 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setEditingExpenseId(null);
                             setPaymentExpenseId((current) =>
@@ -844,7 +891,7 @@ export function RecurringExpensesPage() {
                           Registrar pago
                         </button>
                         <button
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setShowForm(false);
                             setPaymentExpenseId(null);
@@ -860,7 +907,7 @@ export function RecurringExpensesPage() {
                         </button>
                         <button
                           aria-label={`Eliminar ${expense.name}`}
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60"
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-300 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-3"
                           disabled={deleteExpense.isPending}
                           onClick={() => {
                             deleteExpense.reset();
@@ -876,7 +923,7 @@ export function RecurringExpensesPage() {
                         <button
                           aria-controls={`recurring-details-${expense.id}`}
                           aria-expanded={isExpanded}
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setEditingExpenseId(null);
                             setPaymentExpenseId(null);

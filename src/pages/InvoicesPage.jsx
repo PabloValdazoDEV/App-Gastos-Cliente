@@ -21,6 +21,7 @@ import { useHousehold } from '../features/households/useHousehold';
 import {
   FormCard,
   ConfirmationDialog,
+  ExpenseFilters,
   HouseholdGate,
   SelectField,
   TextareaField,
@@ -29,6 +30,7 @@ import {
   categoriesFrom,
   formatCivilDate,
   positiveMoneyInputSchema,
+  peopleFrom,
   todayIso,
 } from './expensePageUtils';
 
@@ -41,10 +43,21 @@ const invoiceSchema = z
     notes: z.string().trim().max(2_000, 'Las notas son demasiado largas.').optional(),
     periodEnd: z.string().min(1, 'Indica el fin del periodo.'),
     periodStart: z.string().min(1, 'Indica el inicio del periodo.'),
+    personalPersonId: z.string().optional(),
+    scope: z.enum(['HOUSEHOLD', 'PERSONAL']),
   })
   .refine((values) => values.periodEnd >= values.periodStart, {
     message: 'El fin del periodo no puede ser anterior al inicio.',
     path: ['periodEnd'],
+  })
+  .superRefine((values, context) => {
+    if (values.scope === 'PERSONAL' && !values.personalPersonId) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Selecciona la persona responsable.',
+        path: ['personalPersonId'],
+      });
+    }
   });
 
 function monthStart() {
@@ -66,17 +79,21 @@ function groupInvoicesByCategory(invoices) {
   invoices.forEach((invoice) => {
     const categoryName = invoice.category?.name ?? 'Sin categoría';
     const categoryId = invoice.categoryId ?? invoice.category?.id ?? categoryName;
-    const existing = groups.get(categoryId);
+    const groupKey = `${categoryId}:${invoice.scope === 'PERSONAL' ? invoice.personalPersonId : 'HOUSEHOLD'}`;
+    const existing = groups.get(groupKey);
 
     if (existing) {
       existing.invoices.push(invoice);
       return;
     }
 
-    groups.set(categoryId, {
+    groups.set(groupKey, {
+      groupKey,
       category: invoice.category,
       categoryId,
       categoryName,
+      personalPerson: invoice.personalPerson,
+      scope: invoice.scope ?? 'HOUSEHOLD',
       invoices: [invoice],
     });
   });
@@ -92,7 +109,7 @@ function groupInvoicesByCategory(invoices) {
     .sort((left, right) => invoiceRecency(right.latestInvoice) - invoiceRecency(left.latestInvoice));
 }
 
-function InvoiceForm({ categories, householdId, initialInvoice = null, onClose }) {
+function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, people }) {
   const queryClient = useQueryClient();
   const isEditing = Boolean(initialInvoice);
   const saveInvoice = useMutation({
@@ -110,6 +127,7 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose }
     formState: { errors },
     handleSubmit,
     register,
+    watch,
   } = useForm({
     defaultValues: {
       amount: centsForInput(initialInvoice?.amountCents),
@@ -119,16 +137,19 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose }
       notes: initialInvoice?.notes ?? '',
       periodEnd: isoDate(initialInvoice?.periodEnd) || todayIso(),
       periodStart: isoDate(initialInvoice?.periodStart) || monthStart(),
+      personalPersonId: initialInvoice?.personalPersonId ?? '',
+      scope: initialInvoice?.scope ?? 'HOUSEHOLD',
     },
     resolver: zodResolver(invoiceSchema),
   });
+  const scope = watch('scope');
 
   const onSubmit = handleSubmit(async (values) => {
     try {
       await saveInvoice.mutateAsync({
         householdId,
         ...(isEditing ? { invoiceId: initialInvoice.id } : {}),
-        body: {
+          body: {
           amountCents: eurosInputToCents(values.amount),
           categoryId: values.categoryId,
           chargeDate: values.chargeDate || null,
@@ -136,6 +157,12 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose }
           notes: values.notes || null,
           periodEnd: values.periodEnd,
           periodStart: values.periodStart,
+          ...(values.scope === 'PERSONAL' || initialInvoice?.scope
+            ? {
+                personalPersonId: values.scope === 'PERSONAL' ? values.personalPersonId : null,
+                scope: values.scope,
+              }
+            : {}),
         },
       });
     } catch {
@@ -212,6 +239,28 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose }
             />
           </div>
 
+          <fieldset>
+            <legend className="text-sm font-bold text-text">¿A quién corresponde?</legend>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <label className="flex min-h-12 items-center gap-3 rounded-xl border border-border-strong px-3.5 py-2.5 text-sm font-semibold has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                <input className="size-4 accent-brand" type="radio" value="HOUSEHOLD" {...register('scope')} />
+                Factura común
+              </label>
+              <label className="flex min-h-12 items-center gap-3 rounded-xl border border-border-strong px-3.5 py-2.5 text-sm font-semibold has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                <input className="size-4 accent-brand" type="radio" value="PERSONAL" {...register('scope')} />
+                Factura personal
+              </label>
+            </div>
+          </fieldset>
+          {scope === 'PERSONAL' ? (
+            <SelectField error={errors.personalPersonId?.message} label="Persona" {...register('personalPersonId')}>
+              <option value="">Selecciona una persona</option>
+              {(people ?? []).map((person) => (
+                <option key={person.id} value={person.id}>{person.name}</option>
+              ))}
+            </SelectField>
+          ) : null}
+
           <TextareaField
             error={errors.notes?.message}
             label="Notas (opcional)"
@@ -252,14 +301,18 @@ function Statistics({ currency, statistics }) {
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {statistics.map((item) => (
-          <article className="rounded-2xl border border-border bg-surface p-5 shadow-card" key={item.categoryId}>
+          <article
+            className="rounded-2xl border border-border bg-surface p-5 shadow-card"
+            key={`${item.categoryId}-${item.scope ?? 'HOUSEHOLD'}-${item.personalPersonId ?? ''}`}
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
                 <CategoryIconBadge category={item.category} />
                 <div>
                   <h3 className="font-extrabold text-text">{item.category?.name ?? 'Categoría'}</h3>
                   <p className="mt-1 text-xs text-text-muted">
-                    {item.invoiceCount} {item.invoiceCount === 1 ? 'factura' : 'facturas'} · Margen{' '}
+                    {item.invoiceCount} {item.invoiceCount === 1 ? 'factura' : 'facturas'} ·{' '}
+                    {item.scope === 'PERSONAL' ? `Personal de ${item.personalPerson?.name ?? 'la persona'}` : 'Común'} · Margen{' '}
                     {(item.effectiveMarginBps ?? 0) / 100}%
                   </p>
                 </div>
@@ -300,6 +353,9 @@ export function InvoicesPage() {
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
   const [deletingInvoiceId, setDeletingInvoiceId] = useState(null);
   const [expandedCategoryId, setExpandedCategoryId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
   const invoices = useQuery({
     enabled: Boolean(householdId),
     queryFn: () => financeService.invoices(householdId),
@@ -316,6 +372,14 @@ export function InvoicesPage() {
     queryKey: ['householdCategories', householdId],
   });
   const categories = categoriesFrom(categoriesQuery.data);
+  const peopleQuery = useQuery({
+    enabled: Boolean(householdId),
+    queryFn: () => typeof householdService.listPeople === 'function'
+      ? householdService.listPeople(householdId)
+      : [],
+    queryKey: ['householdPeople', householdId],
+  });
+  const people = peopleFrom(peopleQuery.data).filter((person) => person.isActive !== false);
   const deleteInvoice = useMutation({
     mutationFn: financeService.deleteInvoice,
     onSuccess: async () => {
@@ -330,17 +394,30 @@ export function InvoicesPage() {
       toast.success('Factura eliminada.');
     },
   });
-  const invoiceGroups = useMemo(
-    () => groupInvoicesByCategory(invoices.data ?? []),
-    [invoices.data],
-  );
+  const filteredInvoices = useMemo(() => {
+    const normalized = search.trim().toLocaleLowerCase('es');
+    return (invoices.data ?? []).filter((invoice) => {
+      const matchesSearch = !normalized || [
+        invoice.category?.name,
+        invoice.notes,
+        invoice.personalPerson?.name,
+        invoice.invoiceDate,
+        invoice.periodStart,
+        invoice.periodEnd,
+      ].some((value) => String(value ?? '').toLocaleLowerCase('es').includes(normalized));
+      return matchesSearch &&
+        (scopeFilter === 'ALL' || invoice.scope === scopeFilter) &&
+        (categoryFilter === 'ALL' || invoice.categoryId === categoryFilter);
+    });
+  }, [categoryFilter, invoices.data, scopeFilter, search]);
+  const invoiceGroups = useMemo(() => groupInvoicesByCategory(filteredInvoices), [filteredInvoices]);
   const invoiceToDelete = invoices.data?.find((invoice) => invoice.id === deletingInvoiceId);
 
   useEffect(() => {
     setExpandedCategoryId((current) =>
-      invoiceGroups.some((group) => group.categoryId === current)
+      invoiceGroups.some((group) => group.groupKey === current)
         ? current
-        : (invoiceGroups[0]?.categoryId ?? null),
+        : (invoiceGroups[0]?.groupKey ?? null),
     );
   }, [invoiceGroups]);
 
@@ -382,18 +459,19 @@ export function InvoicesPage() {
         ) : null}
         <AuthError error={deleteInvoice.error} />
         {showForm ? (
-          categoriesQuery.isPending ? (
+          categoriesQuery.isPending || peopleQuery.isPending ? (
             <LoadingState label="Preparando formulario" />
-          ) : categoriesQuery.isError ? (
+          ) : categoriesQuery.isError || peopleQuery.isError ? (
             <ErrorState
-              description={categoriesQuery.error.message}
-              onRetry={categoriesQuery.refetch}
+              description={(categoriesQuery.error ?? peopleQuery.error).message}
+              onRetry={() => { categoriesQuery.refetch(); peopleQuery.refetch(); }}
               title="No se puede preparar el formulario"
             />
           ) : (
             <InvoiceForm
               categories={categories}
               householdId={householdId}
+              people={people}
               onClose={() => setShowForm(false)}
             />
           )
@@ -443,13 +521,25 @@ export function InvoicesPage() {
             <h2 className="text-xl font-extrabold tracking-tight" id="historico-facturas">
               Histórico
             </h2>
+            <div className="mt-4">
+              <ExpenseFilters
+                categories={categories}
+                categoryId={categoryFilter}
+                onCategoryChange={setCategoryFilter}
+                onScopeChange={setScopeFilter}
+                onSearchChange={setSearch}
+                scope={scopeFilter}
+                search={search}
+              />
+            </div>
+            {invoiceGroups.length === 0 ? <p className="mt-4 rounded-2xl border border-dashed border-border-strong p-6 text-center text-sm text-text-muted">No hay facturas que coincidan con los filtros.</p> : null}
             <div className="mt-4 space-y-3">
               {invoiceGroups.map((group) => {
-                const isExpanded = expandedCategoryId === group.categoryId;
-                const categoryContentId = `facturas-categoria-${group.categoryId}`;
+                const isExpanded = expandedCategoryId === group.groupKey;
+                const categoryContentId = `facturas-categoria-${group.groupKey}`;
 
                 return (
-                  <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card" key={group.categoryId}>
+                    <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card" key={group.groupKey}>
                     <h3>
                       <button
                         aria-controls={categoryContentId}
@@ -458,7 +548,7 @@ export function InvoicesPage() {
                         onClick={() => {
                           setEditingInvoiceId(null);
                           setExpandedCategoryId((current) =>
-                            current === group.categoryId ? null : group.categoryId,
+                            current === group.groupKey ? null : group.groupKey,
                           );
                         }}
                         type="button"
@@ -469,6 +559,9 @@ export function InvoicesPage() {
                           <span className="mt-0.5 block text-sm leading-5 text-text-muted">
                             {group.invoices.length} {group.invoices.length === 1 ? 'factura' : 'facturas'} · Última:{' '}
                             {formatCivilDate(group.latestInvoice.invoiceDate)}
+                            <span className="ml-1 font-bold text-brand-strong">
+                              · {group.scope === 'PERSONAL' ? group.personalPerson?.name ?? 'Personal' : 'Común'}
+                            </span>
                           </span>
                         </span>
                         <ChevronDown
@@ -497,10 +590,10 @@ export function InvoicesPage() {
                                   <p className="text-xl font-extrabold text-text">
                                     {formatCents(invoice.amountCents, currency)}
                                   </p>
-                                  <div className="mt-2 flex flex-wrap justify-end gap-2">
+                                  <div className="mt-2 grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                                     <button
                                       aria-label={`Editar factura de ${group.categoryName}`}
-                                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                                      className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                                       onClick={() => {
                                         setShowForm(false);
                                         setDeletingInvoiceId(null);
@@ -515,7 +608,7 @@ export function InvoicesPage() {
                                     </button>
                                     <button
                                       aria-label={`Eliminar factura de ${group.categoryName}`}
-                                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60"
+                                      className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-300 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-3"
                                       disabled={deleteInvoice.isPending}
                                       onClick={() => {
                                         deleteInvoice.reset();
@@ -531,12 +624,12 @@ export function InvoicesPage() {
                                 </div>
                               </div>
                               {editingInvoiceId === invoice.id ? (
-                                categoriesQuery.isPending ? (
+                                categoriesQuery.isPending || peopleQuery.isPending ? (
                                   <LoadingState label="Preparando edición" />
-                                ) : categoriesQuery.isError ? (
+                                ) : categoriesQuery.isError || peopleQuery.isError ? (
                                   <ErrorState
-                                    description={categoriesQuery.error.message}
-                                    onRetry={categoriesQuery.refetch}
+                                    description={(categoriesQuery.error ?? peopleQuery.error).message}
+                                    onRetry={() => { categoriesQuery.refetch(); peopleQuery.refetch(); }}
                                     title="No se puede editar la factura"
                                   />
                                 ) : (
@@ -547,6 +640,7 @@ export function InvoicesPage() {
                                       initialInvoice={invoice}
                                       key={invoice.id}
                                       onClose={() => setEditingInvoiceId(null)}
+                                      people={people}
                                     />
                                   </div>
                                 )
