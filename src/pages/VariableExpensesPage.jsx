@@ -14,6 +14,8 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { AuthError, SubmitButton } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
 import { financeService } from '../features/finance/financeService';
+import { BudgetMarginControl } from '../features/finance/BudgetMarginControl';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
 import { eurosInputToCents, formatCents } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { CategoryIconBadge } from '../features/households/categoryIcons';
@@ -145,7 +147,7 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
         queryClient.invalidateQueries({
           queryKey: queryKeys.variableExpenses.all(householdId, undefined),
         }),
-        queryClient.invalidateQueries({ queryKey: ['variableStatistics', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       toast.success(isEditing ? 'Gasto variable actualizado.' : 'Gasto variable guardado.');
       onClose();
@@ -476,7 +478,7 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
   );
 }
 
-function VariableStatistics({ currency, people, statistics }) {
+function VariableStatistics({ currency, householdId, people, statistics }) {
   if (statistics.length === 0) return null;
 
   return (
@@ -503,8 +505,8 @@ function VariableStatistics({ currency, people, statistics }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
                 <CategoryIconBadge category={item.category} />
-                <div>
-                  <h3 className="font-extrabold text-text">{item.category?.name ?? 'Categoría'}</h3>
+                <div className="min-w-0">
+                  <h3 className="break-words font-extrabold text-text">{item.category?.name ?? 'Categoría'}</h3>
                   <p className="mt-1 text-xs text-text-muted">
                     {item.scope === 'PERSONAL'
                       ? personName(people, item.personalPersonId)
@@ -514,7 +516,7 @@ function VariableStatistics({ currency, people, statistics }) {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs font-bold uppercase tracking-wide text-text-soft">Recomendado</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-text-soft">Presupuesto recomendado</p>
                 <p className="mt-1 text-xl font-extrabold text-brand-strong">
                   {formatCents(item.recommendedCents, currency)}
                 </p>
@@ -533,6 +535,9 @@ function VariableStatistics({ currency, people, statistics }) {
                 </div>
               ))}
             </dl>
+            <div className="mt-4">
+              <BudgetMarginControl expenseType="VARIABLE" group={item} householdId={householdId} preference={item} />
+            </div>
           </article>
         ))}
       </div>
@@ -580,9 +585,7 @@ export function VariableExpensesPage() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.variableExpenses.all(householdId, undefined),
         }),
-        queryClient.invalidateQueries({ queryKey: ['variableStatistics', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['budget', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       setDeletingMonthId(null);
       toast.success('Gasto variable eliminado.');
@@ -672,7 +675,7 @@ export function VariableExpensesPage() {
           />
         ) : null}
         {statistics.isSuccess ? (
-          <VariableStatistics currency={currency} people={people} statistics={statistics.data} />
+          <VariableStatistics currency={currency} householdId={householdId} people={people} statistics={statistics.data} />
         ) : null}
 
         {months.isPending ? <LoadingState label="Cargando gastos variables" /> : null}
@@ -730,7 +733,7 @@ export function VariableExpensesPage() {
                       <CategoryIconBadge category={item.category} />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-extrabold text-text">{item.category?.name ?? 'Sin categoría'}</h3>
+                          <h3 className="break-words font-extrabold text-text">{item.category?.name ?? 'Sin categoría'}</h3>
                           <StatusBadge>
                             {item.entryMode === 'SUMMARY' ? 'Total mensual' : 'Detallado'}
                           </StatusBadge>

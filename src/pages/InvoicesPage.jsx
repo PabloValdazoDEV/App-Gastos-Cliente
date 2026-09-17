@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, ChevronDown, Pencil, Plus, ReceiptText, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
@@ -14,6 +14,8 @@ import { AuthError, SubmitButton } from '../features/auth/components/AuthFeedbac
 import { FormField } from '../features/auth/components/FormField';
 import { InvoiceDocumentsPanel } from '../features/finance/InvoiceDocumentsPanel';
 import { financeService } from '../features/finance/financeService';
+import { BudgetMarginControl } from '../features/finance/BudgetMarginControl';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { CategoryIconBadge } from '../features/households/categoryIcons';
@@ -79,7 +81,8 @@ function groupInvoicesByCategory(invoices) {
   invoices.forEach((invoice) => {
     const categoryName = invoice.category?.name ?? 'Sin categoría';
     const categoryId = invoice.categoryId ?? invoice.category?.id ?? categoryName;
-    const groupKey = `${categoryId}:${invoice.scope === 'PERSONAL' ? invoice.personalPersonId : 'HOUSEHOLD'}`;
+    const personalPersonId = invoice.personalPersonId ?? invoice.personalPerson?.id ?? '';
+    const groupKey = `${categoryId}:${invoice.scope === 'PERSONAL' ? personalPersonId : 'HOUSEHOLD'}`;
     const existing = groups.get(groupKey);
 
     if (existing) {
@@ -93,6 +96,7 @@ function groupInvoicesByCategory(invoices) {
       categoryId,
       categoryName,
       personalPerson: invoice.personalPerson,
+      personalPersonId,
       scope: invoice.scope ?? 'HOUSEHOLD',
       invoices: [invoice],
     });
@@ -109,15 +113,18 @@ function groupInvoicesByCategory(invoices) {
     .sort((left, right) => invoiceRecency(right.latestInvoice) - invoiceRecency(left.latestInvoice));
 }
 
-function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, people }) {
+function InvoiceForm({ categories, creationPreset = null, householdId, initialInvoice = null, onClose, people }) {
   const queryClient = useQueryClient();
   const isEditing = Boolean(initialInvoice);
+  const isContextualCreation = Boolean(creationPreset) && !isEditing;
+  const unavailableCategory = isContextualCreation && !categories.some((category) => category.id === creationPreset.categoryId);
+  const unavailablePerson = isContextualCreation && creationPreset.scope === 'PERSONAL' && !(people ?? []).some((person) => person.id === creationPreset.personalPersonId);
   const saveInvoice = useMutation({
     mutationFn: isEditing ? financeService.updateInvoice : financeService.createInvoice,
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all(householdId) }),
-        queryClient.invalidateQueries({ queryKey: ['invoiceStatistics', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       toast.success(isEditing ? 'Factura actualizada.' : 'Factura añadida al histórico.');
       onClose();
@@ -127,29 +134,34 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, 
     formState: { errors },
     handleSubmit,
     register,
+    setFocus,
     watch,
   } = useForm({
     defaultValues: {
       amount: centsForInput(initialInvoice?.amountCents),
-      categoryId: initialInvoice?.categoryId ?? categories[0]?.id ?? '',
+      categoryId: initialInvoice?.categoryId ?? (unavailableCategory ? '' : creationPreset?.categoryId) ?? categories[0]?.id ?? '',
       chargeDate: isoDate(initialInvoice?.chargeDate),
       invoiceDate: isoDate(initialInvoice?.invoiceDate) || todayIso(),
       notes: initialInvoice?.notes ?? '',
       periodEnd: isoDate(initialInvoice?.periodEnd) || todayIso(),
       periodStart: isoDate(initialInvoice?.periodStart) || monthStart(),
-      personalPersonId: initialInvoice?.personalPersonId ?? '',
-      scope: initialInvoice?.scope ?? 'HOUSEHOLD',
+      personalPersonId: initialInvoice?.personalPersonId ?? (unavailablePerson ? '' : creationPreset?.personalPersonId) ?? '',
+      scope: initialInvoice?.scope ?? creationPreset?.scope ?? 'HOUSEHOLD',
     },
     resolver: zodResolver(invoiceSchema),
   });
   const scope = watch('scope');
+
+  useEffect(() => {
+    if (isContextualCreation) setFocus('amount');
+  }, [isContextualCreation, setFocus]);
 
   const onSubmit = handleSubmit(async (values) => {
     try {
       await saveInvoice.mutateAsync({
         householdId,
         ...(isEditing ? { invoiceId: initialInvoice.id } : {}),
-          body: {
+        body: {
           amountCents: eurosInputToCents(values.amount),
           categoryId: values.categoryId,
           chargeDate: values.chargeDate || null,
@@ -157,7 +169,7 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, 
           notes: values.notes || null,
           periodEnd: values.periodEnd,
           periodStart: values.periodStart,
-          ...(values.scope === 'PERSONAL' || initialInvoice?.scope
+          ...(values.scope === 'PERSONAL' || initialInvoice?.scope || creationPreset
             ? {
                 personalPersonId: values.scope === 'PERSONAL' ? values.personalPersonId : null,
                 scope: values.scope,
@@ -172,22 +184,30 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, 
 
   return (
     <FormCard
+      compact={Boolean(creationPreset)}
       description={
         isEditing
           ? 'Actualiza el importe o las fechas. Los documentos adjuntos se conservarán.'
           : 'Guarda el importe real y el periodo que cubre para obtener medias comparables.'
       }
       onClose={onClose}
-      title={isEditing ? 'Editar factura' : 'Añadir factura'}
+      title={isEditing ? 'Editar factura' : creationPreset ? `Añadir factura de ${creationPreset.categoryName}` : 'Añadir factura'}
     >
       {categories.length === 0 ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           Necesitas al menos una categoría activa antes de añadir una factura.
         </p>
       ) : (
-        <form className="space-y-5" noValidate onSubmit={onSubmit}>
+        <form className="space-y-5 [&_fieldset]:min-w-0 [&_.grid>div]:min-w-0" noValidate onSubmit={onSubmit}>
+          {unavailableCategory || unavailablePerson ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+              {unavailableCategory ? 'La categoría de este grupo ya no está disponible. Selecciona una categoría activa. ' : ''}
+              {unavailablePerson ? 'La persona de este grupo ya no está activa. Selecciona otra persona o marca la factura como común.' : ''}
+            </p>
+          ) : null}
           <div className="grid gap-5 sm:grid-cols-2">
             <SelectField error={errors.categoryId?.message} label="Categoría" {...register('categoryId')}>
+              <option value="">Selecciona una categoría</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -196,6 +216,7 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, 
             </SelectField>
             <FormField
               error={errors.amount?.message}
+              className="min-w-0"
               inputMode="decimal"
               label="Importe de la factura (€)"
               placeholder="0,00"
@@ -212,12 +233,14 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, 
               <FormField
                 error={errors.periodStart?.message}
                 label="Inicio del periodo"
+                className="min-w-0"
                 type="date"
                 {...register('periodStart')}
               />
               <FormField
                 error={errors.periodEnd?.message}
                 label="Fin del periodo"
+                className="min-w-0"
                 type="date"
                 {...register('periodEnd')}
               />
@@ -228,12 +251,14 @@ function InvoiceForm({ categories, householdId, initialInvoice = null, onClose, 
             <FormField
               error={errors.invoiceDate?.message}
               label="Fecha de emisión"
+              className="min-w-0"
               type="date"
               {...register('invoiceDate')}
             />
             <FormField
               error={errors.chargeDate?.message}
               label="Fecha de cobro (opcional)"
+              className="min-w-0"
               type="date"
               {...register('chargeDate')}
             />
@@ -308,12 +333,12 @@ function Statistics({ currency, statistics }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
                 <CategoryIconBadge category={item.category} />
-                <div>
-                  <h3 className="font-extrabold text-text">{item.category?.name ?? 'Categoría'}</h3>
-                  <p className="mt-1 text-xs text-text-muted">
+                <div className="min-w-0">
+                  <h3 className="break-words font-extrabold text-text">{item.category?.name ?? 'Categoría'}</h3>
+                  <p className="mt-1 break-words text-xs text-text-muted">
                     {item.invoiceCount} {item.invoiceCount === 1 ? 'factura' : 'facturas'} ·{' '}
-                    {item.scope === 'PERSONAL' ? `Personal de ${item.personalPerson?.name ?? 'la persona'}` : 'Común'} · Margen{' '}
-                    {(item.effectiveMarginBps ?? 0) / 100}%
+                    {item.scope === 'PERSONAL' ? `Personal de ${item.personalPerson?.name ?? 'la persona'}` : 'Común'} ·{' '}
+                    {item.effectiveMarginBps ? `Margen ${item.effectiveMarginBps / 100} %` : 'Sin margen'}
                   </p>
                 </div>
               </div>
@@ -353,6 +378,8 @@ export function InvoicesPage() {
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
   const [deletingInvoiceId, setDeletingInvoiceId] = useState(null);
   const [expandedCategoryId, setExpandedCategoryId] = useState(null);
+  const [creatingGroupKey, setCreatingGroupKey] = useState(null);
+  const contextualTriggerRef = useRef(null);
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -385,9 +412,7 @@ export function InvoicesPage() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all(householdId) }),
-        queryClient.invalidateQueries({ queryKey: ['invoiceStatistics', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['budget', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       setDeletingInvoiceId(null);
       setEditingInvoiceId(null);
@@ -421,6 +446,17 @@ export function InvoicesPage() {
     );
   }, [invoiceGroups]);
 
+  useEffect(() => {
+    if (creatingGroupKey && (creatingGroupKey !== expandedCategoryId || !invoiceGroups.some((group) => group.groupKey === creatingGroupKey))) {
+      setCreatingGroupKey(null);
+    }
+  }, [creatingGroupKey, expandedCategoryId, invoiceGroups]);
+
+  function closeContextualForm() {
+    setCreatingGroupKey(null);
+    contextualTriggerRef.current?.focus();
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -432,7 +468,9 @@ export function InvoicesPage() {
           <button
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-extrabold text-on-brand shadow-sm hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             onClick={() => {
+              setCreatingGroupKey(null);
               setEditingInvoiceId(null);
+              setDeletingInvoiceId(null);
               setShowForm(true);
             }}
             type="button"
@@ -503,6 +541,7 @@ export function InvoicesPage() {
               <button
                 className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-on-brand hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 onClick={() => {
+                  setCreatingGroupKey(null);
                   setEditingInvoiceId(null);
                   setShowForm(true);
                 }}
@@ -537,15 +576,18 @@ export function InvoicesPage() {
               {invoiceGroups.map((group) => {
                 const isExpanded = expandedCategoryId === group.groupKey;
                 const categoryContentId = `facturas-categoria-${group.groupKey}`;
+                const creationContentId = `${categoryContentId}-nueva`;
+                const isCreating = creatingGroupKey === group.groupKey;
 
                 return (
-                    <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card" key={group.groupKey}>
+                    <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-card" key={group.groupKey}>
                     <h3>
                       <button
                         aria-controls={categoryContentId}
                         aria-expanded={isExpanded}
                         className="flex min-h-16 w-full items-center gap-3 p-4 text-left hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus sm:p-5"
                         onClick={() => {
+                          setCreatingGroupKey(null);
                           setEditingInvoiceId(null);
                           setExpandedCategoryId((current) =>
                             current === group.groupKey ? null : group.groupKey,
@@ -556,7 +598,7 @@ export function InvoicesPage() {
                         <CategoryIconBadge category={group.category} />
                         <span className="min-w-0 flex-1">
                           <span className="block break-words font-extrabold text-text">{group.categoryName}</span>
-                          <span className="mt-0.5 block text-sm leading-5 text-text-muted">
+                          <span className="mt-0.5 block break-words text-sm leading-5 text-text-muted">
                             {group.invoices.length} {group.invoices.length === 1 ? 'factura' : 'facturas'} · Última:{' '}
                             {formatCivilDate(group.latestInvoice.invoiceDate)}
                             <span className="ml-1 font-bold text-brand-strong">
@@ -570,8 +612,62 @@ export function InvoicesPage() {
                         />
                       </button>
                     </h3>
+                    <div hidden={!isExpanded} id={categoryContentId}>
                     {isExpanded ? (
-                      <div className="border-t border-border p-4 sm:p-5" id={categoryContentId}>
+                      <div className="border-t border-border p-4 sm:p-5">
+                        <div className="mb-4">
+                          <BudgetMarginControl
+                            error={statistics.error}
+                            expenseType="INVOICE"
+                            group={group}
+                            householdId={householdId}
+                            isLoading={statistics.isPending}
+                            onRetry={statistics.refetch}
+                            preference={statistics.data?.find((item) => item.categoryId === group.categoryId
+                              && (item.scope ?? 'HOUSEHOLD') === group.scope
+                              && (group.scope !== 'PERSONAL' || item.personalPersonId === group.personalPersonId))}
+                          />
+                        </div>
+                        <button
+                          aria-controls={creationContentId}
+                          aria-expanded={isCreating}
+                          className="mb-4 inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-left text-sm font-bold text-brand-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                          onClick={() => {
+                            setShowForm(false);
+                            setEditingInvoiceId(null);
+                            setDeletingInvoiceId(null);
+                            setCreatingGroupKey(isCreating ? null : group.groupKey);
+                          }}
+                          ref={contextualTriggerRef}
+                          type="button"
+                        >
+                          <Plus aria-hidden="true" className="size-4 shrink-0" />
+                          <span className="min-w-0 break-words">Añadir factura de {group.categoryName}</span>
+                        </button>
+                        <div hidden={!isCreating} id={creationContentId}>
+                          {isCreating ? (
+                            categoriesQuery.isPending || peopleQuery.isPending ? (
+                              <LoadingState label="Preparando formulario" />
+                            ) : categoriesQuery.isError || peopleQuery.isError ? (
+                              <ErrorState
+                                description={(categoriesQuery.error ?? peopleQuery.error).message}
+                                onRetry={() => { categoriesQuery.refetch(); peopleQuery.refetch(); }}
+                                title="No se puede preparar el formulario"
+                              />
+                            ) : (
+                              <div className="mb-4">
+                                <InvoiceForm
+                                  categories={categories}
+                                  creationPreset={group}
+                                  householdId={householdId}
+                                  key={group.groupKey}
+                                  onClose={closeContextualForm}
+                                  people={people}
+                                />
+                              </div>
+                            )
+                          ) : null}
+                        </div>
                         <ul className="space-y-3">
                           {group.invoices.map((invoice) => (
                             <li className="space-y-4 rounded-xl border border-border bg-surface-muted p-4" key={invoice.id}>
@@ -595,6 +691,7 @@ export function InvoicesPage() {
                                       aria-label={`Editar factura de ${group.categoryName}`}
                                       className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                                       onClick={() => {
+                                        setCreatingGroupKey(null);
                                         setShowForm(false);
                                         setDeletingInvoiceId(null);
                                         setEditingInvoiceId((current) =>
@@ -611,6 +708,7 @@ export function InvoicesPage() {
                                       className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-300 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-3"
                                       disabled={deleteInvoice.isPending}
                                       onClick={() => {
+                                        setCreatingGroupKey(null);
                                         deleteInvoice.reset();
                                         setEditingInvoiceId(null);
                                         setDeletingInvoiceId(invoice.id);
@@ -651,6 +749,7 @@ export function InvoicesPage() {
                         </ul>
                       </div>
                     ) : null}
+                    </div>
                   </section>
                 );
               })}

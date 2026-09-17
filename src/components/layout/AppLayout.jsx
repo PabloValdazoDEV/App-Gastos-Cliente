@@ -36,7 +36,7 @@ function NavigationItems({ mobile = false, pathname }) {
     const isCurrent =
       pathname === to ||
       (!end && pathname.startsWith(`${to}/`)) ||
-      relatedPaths.some((path) => pathname === path);
+      relatedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 
     return (
       <Link
@@ -128,12 +128,13 @@ export function AppLayout() {
     ({ relatedPaths = [], to }) =>
       location.pathname === to ||
       location.pathname.startsWith(`${to}/`) ||
-      relatedPaths.some((path) => location.pathname === path),
+      relatedPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)),
   );
 
   useEffect(() => {
+    const isPurchasePage = location.pathname === '/compras' || location.pathname.startsWith('/compras/');
     document.title = activeDestination
-      ? `${activeDestination.label} · ${publicEnv.appName}`
+      ? `${isPurchasePage ? 'Compras' : activeDestination.label} · ${publicEnv.appName}`
       : `Página no encontrada · ${publicEnv.appName}`;
 
     if (previousPath.current === location.pathname) return;

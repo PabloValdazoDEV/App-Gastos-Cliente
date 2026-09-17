@@ -132,7 +132,7 @@ export function SimulatorPage() {
           }
         }}
       >
-        <div>
+        <div className="min-w-0">
           <label className="text-sm font-bold" htmlFor="simulation-date">Fecha a simular</label>
           <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="simulation-date" onChange={(event) => setDate(event.target.value)} required type="date" value={date} />
         </div>

@@ -9,9 +9,8 @@ import {
   Trash2,
   UserRound,
   UsersRound,
-  X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -25,7 +24,17 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { AuthError, SubmitButton } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
 import { RecurringExpenseDetails } from '../features/finance/RecurringExpenseDetails';
+import { PaymentOccurrenceForm } from '../features/finance/PaymentOccurrenceForm';
 import { financeService } from '../features/finance/financeService';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
+import {
+  expenseFrequencies,
+  formatFrequency,
+  frequencyOptions,
+  isValidIntervalWeeks,
+  maxIntervalWeeks,
+  minIntervalWeeks,
+} from '../features/finance/recurringFrequency';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
@@ -53,17 +62,9 @@ const recurringSchema = z
     amount: positiveMoneyInputSchema,
     scope: z.enum(['HOUSEHOLD', 'PERSONAL']),
     personalPersonId: z.string().optional(),
-    frequency: z.enum([
-      'WEEKLY',
-      'MONTHLY',
-      'BIMONTHLY',
-      'QUARTERLY',
-      'SEMIANNUAL',
-      'YEARLY',
-      'CUSTOM_MONTHS',
-      'ONE_TIME',
-    ]),
+    frequency: z.enum(expenseFrequencies),
     intervalMonths: z.string().optional(),
+    intervalWeeks: z.string().optional(),
     startDate: z.string().min(1, 'Indica la fecha de inicio.'),
     nextDueDate: z.string().min(1, 'Indica el próximo vencimiento.'),
     endDate: z.string().optional(),
@@ -89,6 +90,13 @@ const recurringSchema = z
         code: 'custom',
         message: 'Indica cada cuántos meses se repite.',
         path: ['intervalMonths'],
+      });
+    }
+    if (values.frequency === 'CUSTOM_WEEKS' && !isValidIntervalWeeks(Number(values.intervalWeeks))) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Introduce un número entero de semanas entre 2 y 520. Para una semana, elige Semanal.',
+        path: ['intervalWeeks'],
       });
     }
     if (values.endDate && values.endDate < values.startDate) {
@@ -123,52 +131,6 @@ const recurringSchema = z
     }
   });
 
-const paymentSchema = z
-  .object({
-    status: z.enum(['PAID', 'SKIPPED']),
-    actualAmount: z.string().optional(),
-    paymentDate: z.string().optional(),
-    updateNextAmount: z.boolean(),
-    notes: z.string().trim().max(2_000, 'Las notas son demasiado largas.').optional(),
-  })
-  .superRefine((values, context) => {
-    if (values.status === 'PAID') {
-      const amountResult = positiveMoneyInputSchema.safeParse(values.actualAmount ?? '');
-      if (!amountResult.success) {
-        context.addIssue({
-          code: 'custom',
-          message: amountResult.error.issues[0].message,
-          path: ['actualAmount'],
-        });
-      }
-      if (!values.paymentDate) {
-        context.addIssue({
-          code: 'custom',
-          message: 'Indica la fecha de pago.',
-          path: ['paymentDate'],
-        });
-      }
-    }
-    if (values.status === 'SKIPPED' && values.updateNextAmount) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Un vencimiento omitido no puede cambiar el próximo importe.',
-        path: ['updateNextAmount'],
-      });
-    }
-  });
-
-const frequencyLabels = {
-  WEEKLY: 'Semanal',
-  MONTHLY: 'Mensual',
-  BIMONTHLY: 'Bimestral',
-  QUARTERLY: 'Trimestral',
-  SEMIANNUAL: 'Semestral',
-  YEARLY: 'Anual',
-  CUSTOM_MONTHS: 'Cada varios meses',
-  ONE_TIME: 'Pago único',
-};
-
 function centsForInput(cents) {
   return Number.isSafeInteger(cents) ? (cents / 100).toFixed(2) : '';
 }
@@ -181,192 +143,28 @@ function marginInputToBps(value) {
   return Math.round(Number(String(value).trim().replace(',', '.')) * 100);
 }
 
-function PaymentForm({ currency, expense, householdId, onClose }) {
-  const queryClient = useQueryClient();
-  const payment = useMutation({
-    mutationFn: financeService.registerPayment,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.recurringExpenses.all(householdId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.recurringExpenses.payments(householdId, expense.id),
-        }),
-        queryClient.invalidateQueries({ queryKey: ['calendar', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
-      ]);
-      toast.success('Pago registrado.');
-      onClose();
-    },
-  });
-  const {
-    formState: { errors },
-    handleSubmit,
-    register,
-    setValue,
-    watch,
-  } = useForm({
-    defaultValues: {
-      actualAmount: centsForInput(expense.amountCents),
-      notes: '',
-      paymentDate: todayIso(),
-      status: 'PAID',
-      updateNextAmount: false,
-    },
-    resolver: zodResolver(paymentSchema),
-  });
-  const status = watch('status');
-  const statusRegistration = register('status', {
-    onChange: (event) => {
-      if (event.target.value === 'SKIPPED') {
-        setValue('updateNextAmount', false, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-      }
-    },
-  });
-
-  const onSubmit = handleSubmit(async (values) => {
-    try {
-      await payment.mutateAsync({
-        householdId,
-        expenseId: expense.id,
-        body: {
-          actualAmountCents:
-            values.status === 'PAID' ? eurosInputToCents(values.actualAmount) : null,
-          dueDate: isoDate(expense.nextDueDate),
-          expectedAmountCents: expense.amountCents,
-          nextAmountDecision: values.updateNextAmount
-            ? 'UPDATE_NEXT_AMOUNT'
-            : 'KEEP_PREVIOUS',
-          nextExpectedAmountCents: values.updateNextAmount
-            ? eurosInputToCents(values.actualAmount)
-            : null,
-          notes: values.notes || null,
-          paymentDate: values.status === 'PAID' ? values.paymentDate : null,
-          status: values.status,
-        },
-      });
-    } catch {
-      // El error normalizado se muestra dentro del formulario.
-    }
-  });
-
-  return (
-    <form
-      aria-label={`Registrar pago de ${expense.name}`}
-      className="mt-5 border-t border-border pt-5"
-      noValidate
-      onSubmit={onSubmit}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="font-extrabold text-text">Registrar vencimiento</h4>
-          <p className="mt-1 text-sm text-text-muted">
-            Previsto: {formatCents(expense.amountCents, currency)} ·{' '}
-            {formatCivilDate(expense.nextDueDate)}
-          </p>
-        </div>
-        <button
-          aria-label="Cancelar registro de pago"
-          className="grid size-11 shrink-0 place-items-center rounded-xl text-text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          onClick={onClose}
-          type="button"
-        >
-          <X aria-hidden="true" className="size-5" />
-        </button>
-      </div>
-
-      <fieldset className="mt-5">
-        <legend className="text-sm font-bold text-text">Resultado del vencimiento</legend>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          {[
-            ['PAID', 'Pagado'],
-            ['SKIPPED', 'Omitido'],
-          ].map(([value, label]) => (
-            <label
-              className="flex min-h-12 items-center gap-3 rounded-xl border border-border-strong px-3.5 py-2.5 text-sm font-semibold has-[:checked]:border-brand has-[:checked]:bg-brand-soft"
-              key={value}
-            >
-              <input
-                className="size-4 accent-brand"
-                type="radio"
-                value={value}
-                {...statusRegistration}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {status === 'PAID' ? (
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <FormField
-            error={errors.actualAmount?.message}
-            inputMode="decimal"
-            label="Importe real (€)"
-            placeholder="0,00"
-            {...register('actualAmount')}
-          />
-          <FormField
-            error={errors.paymentDate?.message}
-            label="Fecha de pago"
-            type="date"
-            {...register('paymentDate')}
-          />
-        </div>
-      ) : null}
-
-      {status === 'PAID' ? (
-        <label className="mt-5 flex min-h-11 items-start gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm text-text">
-          <input className="mt-0.5 size-4 accent-brand" type="checkbox" {...register('updateNextAmount')} />
-          <span>
-            <span className="block font-bold">Usar el importe real en el próximo vencimiento</span>
-            <span className="mt-0.5 block text-xs leading-5 text-text-muted">
-              El histórico conservará por separado el importe que se esperaba y el que se pagó.
-            </span>
-          </span>
-        </label>
-      ) : null}
-
-      <div className="mt-5">
-        <TextareaField
-          error={errors.notes?.message}
-          label="Notas (opcional)"
-          maxLength={2_000}
-          {...register('notes')}
-        />
-      </div>
-      <div className="mt-5 space-y-4">
-        <AuthError error={payment.error} />
-        <SubmitButton isPending={payment.isPending} pendingLabel="Registrando pago…">
-          Guardar pago
-        </SubmitButton>
-      </div>
-    </form>
-  );
-}
-
 function RecurringForm({ categories, householdId, initialExpense = null, onClose, people }) {
   const queryClient = useQueryClient();
   const isEditing = Boolean(initialExpense);
+  const weeksSuggested = useRef(initialExpense?.intervalWeeks != null);
   const saveExpense = useMutation({
     mutationFn: isEditing ? financeService.updateRecurring : financeService.createRecurring,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.recurringExpenses.all(householdId),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.recurringExpenses.all(householdId) }),
+        queryClient.invalidateQueries({ queryKey: ['calendar', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
+      ]);
       toast.success(isEditing ? 'Gasto recurrente actualizado.' : 'Gasto recurrente creado.');
       onClose();
     },
   });
   const {
     formState: { errors },
+    getValues,
     handleSubmit,
     register,
+    setValue,
     watch,
   } = useForm({
     defaultValues: {
@@ -376,6 +174,9 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
       frequency: initialExpense?.frequency ?? 'MONTHLY',
       intervalMonths: initialExpense?.intervalMonths
         ? String(initialExpense.intervalMonths)
+        : '',
+      intervalWeeks: initialExpense?.intervalWeeks != null
+        ? String(initialExpense.intervalWeeks)
         : '',
       marginMode: Number.isInteger(initialExpense?.safetyMarginOverrideBps)
         ? 'SPECIFIC'
@@ -394,6 +195,17 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
   });
   const scope = watch('scope');
   const frequency = watch('frequency');
+  const intervalWeeks = Number(watch('intervalWeeks'));
+  const frequencyRegistration = register('frequency', {
+    onChange: (event) => {
+      if (event.target.value === 'CUSTOM_WEEKS' && !weeksSuggested.current) {
+        weeksSuggested.current = true;
+        if (!getValues('intervalWeeks')) {
+          setValue('intervalWeeks', '4', { shouldDirty: true });
+        }
+      }
+    },
+  });
   const marginMode = watch('marginMode');
   const withoutMargin = watch('withoutMargin');
 
@@ -409,6 +221,8 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
           frequency: values.frequency,
           intervalMonths:
             values.frequency === 'CUSTOM_MONTHS' ? Number(values.intervalMonths) : null,
+          intervalWeeks:
+            values.frequency === 'CUSTOM_WEEKS' ? Number(values.intervalWeeks) : null,
           name: values.name,
           nextDueDate: values.nextDueDate,
           notes: values.notes || null,
@@ -444,7 +258,12 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
           Necesitas al menos una categoría activa antes de añadir un gasto.
         </p>
       ) : (
-        <form className="space-y-5" noValidate onSubmit={onSubmit}>
+        <form
+          aria-label={isEditing ? `Editar ${initialExpense.name}` : 'Crear gasto recurrente'}
+          className="space-y-5"
+          noValidate
+          onSubmit={onSubmit}
+        >
           <div className="grid gap-5 sm:grid-cols-2">
             <FormField
               error={errors.name?.message}
@@ -466,14 +285,30 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
               placeholder="0,00"
               {...register('amount')}
             />
-            <SelectField error={errors.frequency?.message} label="Periodicidad" {...register('frequency')}>
-              {Object.entries(frequencyLabels).map(([value, label]) => (
+            <SelectField error={errors.frequency?.message} label="Periodicidad" {...frequencyRegistration}>
+              {Object.entries(frequencyOptions).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
             </SelectField>
           </div>
+
+          {frequency === 'CUSTOM_WEEKS' ? (
+            <FormField
+              error={errors.intervalWeeks?.message}
+              help={isValidIntervalWeeks(intervalWeeks)
+                ? `Cada ${intervalWeeks} semanas significa cada ${intervalWeeks * 7} días. No es lo mismo que un cobro mensual: la fecha puede cambiar de un mes a otro.`
+                : 'Introduce entre 2 y 520 semanas. Para un cobro cada semana, elige Semanal.'}
+              inputMode="numeric"
+              label="Se repite cada (semanas)"
+              max={maxIntervalWeeks}
+              min={minIntervalWeeks}
+              step="1"
+              type="number"
+              {...register('intervalWeeks')}
+            />
+          ) : null}
 
           {frequency === 'CUSTOM_MONTHS' ? (
             <FormField
@@ -524,7 +359,7 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
             </SelectField>
           ) : null}
 
-          <div className="grid gap-5 sm:grid-cols-3">
+          <div className="date-fields-grid grid min-w-0 gap-5">
             <FormField
               error={errors.startDate?.message}
               help="El día en que empezó este gasto. Por ejemplo, cuando comenzó tu contrato de alquiler."
@@ -628,7 +463,14 @@ export function RecurringExpensesPage() {
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
   const [showForm, setShowForm] = useState(false);
-  const [paymentExpenseId, setPaymentExpenseId] = useState(null);
+  const [paymentSelection, setPaymentSelection] = useState(null);
+  const paymentSelectionRef = useRef(null);
+  const paymentExpenseId = paymentSelection?.expenseId ?? null;
+  const selectPayment = useCallback((expenseId) => {
+    const nextSelection = expenseId ? { expenseId } : null;
+    paymentSelectionRef.current = nextSelection;
+    setPaymentSelection(nextSelection);
+  }, []);
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState(routeExpenseId ?? null);
@@ -657,8 +499,7 @@ export function RecurringExpensesPage() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.recurringExpenses.all(householdId) }),
-        queryClient.invalidateQueries({ queryKey: ['budget', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
         queryClient.invalidateQueries({ queryKey: ['calendar', householdId] }),
       ]);
       setDeletingExpenseId(null);
@@ -702,9 +543,12 @@ export function RecurringExpensesPage() {
 
   useEffect(() => {
     if (routeExpenseFound && shouldRegisterRoutePayment) {
-      setPaymentExpenseId(routeExpenseId);
+      setExpandedExpenseId(null);
+      selectPayment(routeExpenseId);
     }
-  }, [routeExpenseFound, routeExpenseId, shouldRegisterRoutePayment]);
+  }, [routeExpenseFound, routeExpenseId, selectPayment, shouldRegisterRoutePayment]);
+
+  useEffect(() => () => { paymentSelectionRef.current = null; }, []);
 
   return (
     <div className="space-y-8">
@@ -718,7 +562,7 @@ export function RecurringExpensesPage() {
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-extrabold text-on-brand shadow-sm hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             onClick={() => {
               setEditingExpenseId(null);
-              setPaymentExpenseId(null);
+              selectPayment(null);
               setShowForm(true);
             }}
             type="button"
@@ -849,7 +693,7 @@ export function RecurringExpensesPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="break-words font-extrabold text-text">{expense.name}</h3>
-                          <StatusBadge>{frequencyLabels[expense.frequency] ?? expense.frequency}</StatusBadge>
+                          <StatusBadge>{formatFrequency(expense)}</StatusBadge>
                         </div>
                         <p className="mt-1 text-sm text-text-muted">
                           {expense.category?.name ?? 'Sin categoría'} ·{' '}
@@ -878,12 +722,14 @@ export function RecurringExpensesPage() {
                       </p>
                       <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                         <button
+                          aria-controls={`recurring-payment-form-${expense.id}`}
+                          aria-expanded={paymentExpenseId === expense.id}
                           className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-brand px-2 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
+                          id={`recurring-payment-trigger-${expense.id}`}
                           onClick={() => {
                             setEditingExpenseId(null);
-                            setPaymentExpenseId((current) =>
-                              current === expense.id ? null : expense.id,
-                            );
+                            setExpandedExpenseId(null);
+                            selectPayment(paymentExpenseId === expense.id ? null : expense.id);
                           }}
                           type="button"
                         >
@@ -894,7 +740,7 @@ export function RecurringExpensesPage() {
                           className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setShowForm(false);
-                            setPaymentExpenseId(null);
+                            selectPayment(null);
                             setExpandedExpenseId(null);
                             setEditingExpenseId((current) =>
                               current === expense.id ? null : expense.id,
@@ -912,7 +758,7 @@ export function RecurringExpensesPage() {
                           onClick={() => {
                             deleteExpense.reset();
                             setEditingExpenseId(null);
-                            setPaymentExpenseId(null);
+                            selectPayment(null);
                             setDeletingExpenseId(expense.id);
                           }}
                           type="button"
@@ -926,7 +772,7 @@ export function RecurringExpensesPage() {
                           className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setEditingExpenseId(null);
-                            setPaymentExpenseId(null);
+                            selectPayment(null);
                             setExpandedExpenseId((current) =>
                               current === expense.id ? null : expense.id,
                             );
@@ -943,11 +789,19 @@ export function RecurringExpensesPage() {
                     </div>
                   </div>
                   {paymentExpenseId === expense.id ? (
-                    <PaymentForm
+                    <PaymentOccurrenceForm
                       currency={currency}
                       expense={expense}
                       householdId={householdId}
-                      onClose={() => setPaymentExpenseId(null)}
+                      id={`recurring-payment-form-${expense.id}`}
+                      key={expense.id}
+                      onClose={() => {
+                        // Match the opening instance, not only the expense: a late
+                        // response must not close or focus a newly opened form.
+                        if (paymentSelectionRef.current !== paymentSelection) return;
+                        selectPayment(null);
+                        document.getElementById(`recurring-payment-trigger-${expense.id}`)?.focus();
+                      }}
                     />
                   ) : null}
                   {isEditing ? (

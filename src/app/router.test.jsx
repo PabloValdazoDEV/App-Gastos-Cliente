@@ -12,3 +12,15 @@ describe('router público', () => {
     expect(matches).toHaveLength(2);
   });
 });
+
+describe('rutas de compras', () => {
+  it.each([
+    ['/compras', 'compras'],
+    ['/compras/compra-1', 'compras/:purchaseId'],
+  ])('incluye %s en el layout autenticado existente', (path, routePath) => {
+    const matches = matchRoutes(router.routes, path);
+    expect(matches.at(-1).route.path).toBe(routePath);
+    expect(matches.some((match) => match.route.path === '/')).toBe(true);
+    expect(matches.length).toBeGreaterThan(2);
+  });
+});

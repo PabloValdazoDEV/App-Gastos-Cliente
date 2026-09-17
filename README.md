@@ -46,7 +46,7 @@ La aplicación se sirve por defecto en `http://localhost:5173`.
 Edita `.env` antes de iniciar la aplicación. Las tres variables mínimas son:
 
 ```env
-VITE_API_URL=http://localhost:3000/api
+VITE_API_URL=/api
 VITE_APP_NAME=BudgetApp
 VITE_CSRF_COOKIE_NAME=csrf_token
 ```

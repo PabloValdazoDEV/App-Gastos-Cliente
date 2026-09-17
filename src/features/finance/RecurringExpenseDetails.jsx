@@ -1,18 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellRing, CalendarDays, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { BellRing, CalendarDays, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 import { queryKeys } from '../../api/queryKeys';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../../components/ui/FeedbackStates';
 import { AuthError } from '../auth/components/AuthFeedback';
-import { eurosInputToCents, formatCents, isoDate } from './money';
+import { formatCents } from './money';
 import { financeService } from './financeService';
+import { PaymentOccurrenceForm } from './PaymentOccurrenceForm';
+import { formatFrequency } from './recurringFrequency';
 import { formatCivilDate } from '../../pages/expensePageUtils';
 
 const inputClass =
-  'min-h-11 w-full rounded-xl border border-border-strong bg-surface px-3 py-2 text-base text-text outline-none focus:border-brand focus:ring-3 focus:ring-brand-soft disabled:bg-surface-muted disabled:text-text-muted';
+  'box-border min-h-11 w-full min-w-0 max-w-full rounded-xl border border-border-strong bg-surface px-3 py-2 text-base text-text outline-none focus:border-brand focus:ring-3 focus:ring-brand-soft disabled:bg-surface-muted disabled:text-text-muted';
 const primaryButton =
   'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-extrabold text-on-brand hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
 const secondaryButton =
@@ -24,180 +26,24 @@ const channelLabels = Object.freeze({
   WEB_PUSH: 'Aviso web',
 });
 
-function centsForInput(cents) {
-  return Number.isSafeInteger(cents) ? (cents / 100).toFixed(2) : '';
-}
-
-function PaymentEditor({ currency, expenseId, householdId, onClose, payment }) {
-  const queryClient = useQueryClient();
-  const [status, setStatus] = useState(payment.status);
-  const [actualAmount, setActualAmount] = useState(centsForInput(payment.actualAmountCents));
-  const [paymentDate, setPaymentDate] = useState(isoDate(payment.paymentDate));
-  const [notes, setNotes] = useState(payment.notes ?? '');
-  const [validationError, setValidationError] = useState('');
-  const updatePayment = useMutation({
-    mutationFn: financeService.updateRecurringPayment,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.recurringExpenses.payments(householdId, expenseId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.recurringExpenses.all(householdId),
-        }),
-        queryClient.invalidateQueries({ queryKey: ['calendar', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
-      ]);
-      toast.success('Pago corregido.');
-      onClose();
-    },
-  });
-
-  function savePayment(event) {
-    event.preventDefault();
-    let actualAmountCents;
-    try {
-      if (status === 'PAID' && !paymentDate) {
-        throw new Error('Indica la fecha de pago.');
-      }
-      actualAmountCents = status === 'PAID' ? eurosInputToCents(actualAmount) : null;
-      setValidationError('');
-    } catch (error) {
-      setValidationError(error.message);
-      return;
-    }
-    updatePayment.mutate({
-      householdId,
-      expenseId,
-      paymentId: payment.id,
-      body: {
-        status,
-        actualAmountCents,
-        paymentDate: status === 'PAID' ? paymentDate : null,
-        notes: notes.trim() || null,
-      },
-    });
+function PaymentHistory({ currency, expense, householdId }) {
+  const expenseId = expense.id;
+  const [editingSelection, setEditingSelection] = useState(null);
+  const editingSelectionRef = useRef(null);
+  const editingPaymentId = editingSelection?.paymentId ?? null;
+  function selectPayment(paymentId) {
+    const nextSelection = paymentId ? { paymentId } : null;
+    editingSelectionRef.current = nextSelection;
+    setEditingSelection(nextSelection);
   }
-
-  return (
-    <form
-      aria-label={`Editar pago de ${formatCivilDate(payment.dueDate)}`}
-      className="mt-4 border-t border-border pt-4"
-      noValidate
-      onSubmit={savePayment}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h5 className="font-extrabold text-text">Corregir pago</h5>
-          <p className="mt-1 text-xs leading-5 text-text-muted">
-            Cambia solo este registro histórico; el próximo vencimiento y su importe no se alteran.
-          </p>
-        </div>
-        <button
-          aria-label="Cancelar edición del pago"
-          className="grid size-11 shrink-0 place-items-center rounded-xl text-text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          onClick={onClose}
-          type="button"
-        >
-          <X aria-hidden="true" className="size-4" />
-        </button>
-      </div>
-
-      <fieldset className="mt-4">
-        <legend className="text-sm font-bold text-text">Resultado del vencimiento</legend>
-        <div className="mt-2 grid gap-2 min-[430px]:grid-cols-2">
-          {[
-            ['PAID', 'Pagado'],
-            ['SKIPPED', 'Omitido'],
-          ].map(([value, label]) => (
-            <label
-              className="flex min-h-11 items-center gap-3 rounded-xl border border-border-strong px-3 py-2 text-sm font-semibold has-[:checked]:border-brand has-[:checked]:bg-brand-soft"
-              key={value}
-            >
-              <input
-                checked={status === value}
-                className="size-4 accent-brand"
-                name={`payment-status-${payment.id}`}
-                onChange={() => setStatus(value)}
-                type="radio"
-                value={value}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {status === 'PAID' ? (
-        <div className="mt-4 grid gap-4 min-[430px]:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={`payment-amount-${payment.id}`}>
-              Importe real ({currency === 'EUR' ? '€' : currency})
-            </label>
-            <input
-              className={inputClass}
-              id={`payment-amount-${payment.id}`}
-              inputMode="decimal"
-              onChange={(event) => setActualAmount(event.target.value)}
-              placeholder="0,00"
-              value={actualAmount}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={`payment-date-${payment.id}`}>
-              Fecha de pago
-            </label>
-            <input
-              className={inputClass}
-              id={`payment-date-${payment.id}`}
-              onChange={(event) => setPaymentDate(event.target.value)}
-              type="date"
-              value={paymentDate}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mt-4">
-        <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={`payment-notes-${payment.id}`}>
-          Notas <span className="font-medium text-text-muted">(opcional)</span>
-        </label>
-        <textarea
-          className={`${inputClass} min-h-24 resize-y`}
-          id={`payment-notes-${payment.id}`}
-          maxLength="2000"
-          onChange={(event) => setNotes(event.target.value)}
-          value={notes}
-        />
-      </div>
-
-      {validationError ? (
-        <p className="mt-3 text-sm font-semibold text-red-700" role="alert">
-          {validationError}
-        </p>
-      ) : null}
-      <AuthError error={updatePayment.error} />
-      <div className="mt-4 flex flex-col gap-2 min-[430px]:flex-row">
-        <button className={primaryButton} disabled={updatePayment.isPending} type="submit">
-          {updatePayment.isPending ? 'Guardando…' : 'Guardar corrección'}
-        </button>
-        <button className={secondaryButton} onClick={onClose} type="button">
-          Cancelar
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function PaymentHistory({ currency, expenseId, householdId }) {
-  const [editingPaymentId, setEditingPaymentId] = useState(null);
+  useEffect(() => () => { editingSelectionRef.current = null; }, []);
   const payments = useQuery({
     queryFn: () => financeService.recurringPayments({ householdId, expenseId }),
     queryKey: queryKeys.recurringExpenses.payments(householdId, expenseId),
   });
 
   return (
-    <section aria-labelledby={`payment-history-${expenseId}`}>
+    <section aria-labelledby={`payment-history-${expenseId}`} className="min-w-0">
       <div className="flex items-center gap-3">
         <span className="grid size-9 place-items-center rounded-xl bg-brand-soft text-brand-strong">
           <CalendarDays aria-hidden="true" className="size-4" />
@@ -266,25 +112,32 @@ function PaymentHistory({ currency, expenseId, householdId }) {
                 {payment.notes ? (
                   <p className="mt-3 text-sm leading-6 text-text-muted">{payment.notes}</p>
                 ) : null}
+                <button
+                  aria-controls={`payment-history-form-${payment.id}`}
+                  aria-expanded={editingPaymentId === payment.id}
+                  className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-brand hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                  id={`payment-history-trigger-${payment.id}`}
+                  onClick={() => selectPayment(editingPaymentId === payment.id ? null : payment.id)}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" className="size-4" />
+                  Editar pago
+                </button>
                 {editingPaymentId === payment.id ? (
-                  <PaymentEditor
+                  <PaymentOccurrenceForm
                     currency={currency}
-                    expenseId={expenseId}
+                    expense={expense}
                     householdId={householdId}
+                    id={`payment-history-form-${payment.id}`}
                     key={payment.id}
-                    onClose={() => setEditingPaymentId(null)}
+                    onClose={() => {
+                      if (editingSelectionRef.current !== editingSelection) return;
+                      selectPayment(null);
+                      document.getElementById(`payment-history-trigger-${payment.id}`)?.focus();
+                    }}
                     payment={payment}
                   />
-                ) : (
-                  <button
-                    className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-brand hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                    onClick={() => setEditingPaymentId(payment.id)}
-                    type="button"
-                  >
-                    <Pencil aria-hidden="true" className="size-4" />
-                    Editar pago
-                  </button>
-                )}
+                ) : null}
               </li>
             ))}
           </ol>
@@ -360,7 +213,7 @@ function ReminderRulesEditor({ expense, householdId }) {
   }
 
   return (
-    <section aria-labelledby={`reminder-rules-${expense.id}`}>
+    <section aria-labelledby={`reminder-rules-${expense.id}`} className="min-w-0">
       <div className="flex items-center gap-3">
         <span className="grid size-9 place-items-center rounded-xl bg-brand-soft text-brand-strong">
           <BellRing aria-hidden="true" className="size-4" />
@@ -502,7 +355,11 @@ function ReminderRulesEditor({ expense, householdId }) {
 export function RecurringExpenseDetails({ currency, expense, householdId }) {
   return (
     <div className="mt-5 grid gap-7 border-t border-border pt-5 lg:grid-cols-2">
-      <PaymentHistory currency={currency} expenseId={expense.id} householdId={householdId} />
+      <dl className="min-w-0 lg:col-span-2">
+        <dt className="text-xs font-semibold text-text-soft">Periodicidad</dt>
+        <dd className="mt-1 break-words text-sm font-bold text-text">{formatFrequency(expense)}</dd>
+      </dl>
+      <PaymentHistory currency={currency} expense={expense} householdId={householdId} />
       <ReminderRulesEditor expense={expense} householdId={householdId} />
     </div>
   );

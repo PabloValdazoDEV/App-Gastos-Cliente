@@ -50,6 +50,12 @@ export const NotificationsPage = lazy(() =>
 export const PlanningPage = lazy(() =>
   import('../pages/PlanningPage').then((module) => ({ default: module.PlanningPage })),
 );
+export const PurchasesPage = lazy(() =>
+  import('../pages/PurchasesPage').then((module) => ({ default: module.PurchasesPage })),
+);
+export const PurchaseDetailsPage = lazy(() =>
+  import('../pages/PurchaseDetailsPage').then((module) => ({ default: module.PurchaseDetailsPage })),
+);
 export const PrivacyPage = lazy(() =>
   import('../pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })),
 );

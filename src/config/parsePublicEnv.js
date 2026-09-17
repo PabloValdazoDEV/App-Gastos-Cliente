@@ -5,9 +5,15 @@ const featureFlagSchema = z
   .default('false')
   .transform((value) => value === 'true');
 
+const apiUrlSchema = z.string().trim().refine(
+  (value) =>
+    /^\/(?!\/)\S+$/.test(value) || z.string().url().safeParse(value).success,
+  'Debe ser una URL absoluta o una ruta que empiece por /.',
+);
+
 const publicEnvSchema = z
   .object({
-    VITE_API_URL: z.string().trim().url('Debe ser una URL válida.'),
+    VITE_API_URL: apiUrlSchema,
     VITE_CSRF_COOKIE_NAME: z
       .string()
       .trim()

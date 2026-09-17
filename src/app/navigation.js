@@ -31,6 +31,6 @@ export const primaryNavigation = Object.freeze([
     label: 'Más',
     to: '/mas',
     icon: CircleEllipsis,
-    relatedPaths: ['/ajustes', '/hogar', '/notificaciones', '/cuentas'],
+    relatedPaths: ['/ajustes', '/hogar', '/notificaciones', '/cuentas', '/compras'],
   },
 ]);

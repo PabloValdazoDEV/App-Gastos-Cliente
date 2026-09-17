@@ -6,6 +6,9 @@ const home = (householdId) => `/households/${householdId}`;
 export const financeService = {
   dashboard: (householdId) => http.get(`${home(householdId)}/dashboard`),
   budget: (householdId) => http.get(`${home(householdId)}/budget`),
+  budgetMarginPreferences: (householdId) => http.get(`${home(householdId)}/budget-margin-preferences`),
+  setBudgetMarginPreference: ({ householdId, body }) =>
+    http.put(`${home(householdId)}/budget-margin-preferences`, body),
   updateBalance: ({ householdId, balanceCents }) =>
     http.patch(`${home(householdId)}/balance`, { balanceCents }),
 

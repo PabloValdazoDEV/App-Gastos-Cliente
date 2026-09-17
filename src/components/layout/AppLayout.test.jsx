@@ -201,4 +201,21 @@ describe('AppLayout', () => {
     await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeInTheDocument();
   });
+
+  it('mantiene Más activo en la ficha de una compra y conserva cinco destinos móviles', () => {
+    render(
+      <WithHousehold>
+        <MemoryRouter initialEntries={['/compras/compra-1']}>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="compras/:purchaseId" element={<h1>Compra de prueba</h1>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </WithHousehold>,
+    );
+    screen.getAllByRole('link', { name: 'Más' }).forEach((link) => expect(link).toHaveAttribute('aria-current', 'page'));
+    expect(document.title).toMatch(/^Compras · /);
+    expect(within(screen.getByRole('navigation', { name: 'Navegación principal móvil' })).getAllByRole('link')).toHaveLength(5);
+  });
 });

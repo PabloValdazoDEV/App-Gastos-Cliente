@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChartNoAxesCombined, CheckCircle2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
@@ -15,13 +15,20 @@ import { useHousehold } from '../features/households/useHousehold';
 const today = () => new Date().toISOString().slice(0, 10);
 const formatBalanceInput = (cents) => ((cents ?? 0) / 100).toFixed(2).replace('.', ',');
 
-export function PlanningPage() {
-  const { currentHousehold, isPending: householdPending } = useHousehold();
-  const householdId = currentHousehold?.id;
+function HouseholdPlanning({ currentHousehold }) {
+  const householdId = currentHousehold.id;
+  const mountedRef = useRef(true);
   const [calculationDate, setCalculationDate] = useState(today);
   const [balance, setBalance] = useState('');
   const [personalBalances, setPersonalBalances] = useState({});
   const queryClient = useQueryClient();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+  function refresh(queryKey) {
+    queryClient.invalidateQueries({ queryKey, ...(mountedRef.current ? {} : { refetchType: 'none' }) });
+  }
   const dashboard = useQuery({
     queryKey: ['dashboard', householdId, 'planning'],
     queryFn: () => financeService.dashboard(householdId),
@@ -35,24 +42,24 @@ export function PlanningPage() {
   const prepare = useMutation({
     mutationFn: financeService.prepareMonth,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] });
-      queryClient.invalidateQueries({ queryKey: ['plannings', householdId] });
-      toast.success('Saldos del mes confirmados y cálculos actualizados.');
+      refresh(['dashboard', householdId]);
+      refresh(['plannings', householdId]);
+      if (mountedRef.current) toast.success('Saldos del mes confirmados y cálculos actualizados.');
     },
   });
   const fund = useMutation({
     mutationFn: financeService.fundPlanning,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] });
-      queryClient.invalidateQueries({ queryKey: ['plannings', householdId] });
-      toast.success('Mes marcado como financiado.');
+      refresh(['dashboard', householdId]);
+      refresh(['plannings', householdId]);
+      if (mountedRef.current) toast.success('Mes marcado como financiado.');
     },
   });
   const closeRecovery = useMutation({
     mutationFn: financeService.updateRecovery,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] });
-      toast.success('Plan de recuperación actualizado.');
+      refresh(['dashboard', householdId]);
+      if (mountedRef.current) toast.success('Plan de recuperación actualizado.');
     },
   });
 
@@ -73,17 +80,7 @@ export function PlanningPage() {
     });
   }, [dashboard.data]);
 
-  if (householdPending || (householdId && dashboard.isPending)) return <LoadingState />;
-  if (!householdId) {
-    return (
-      <EmptyState
-        action={<Link className="font-bold text-brand-strong" to="/hogar">Crear hogar</Link>}
-        description="Configura primero las personas que participan en el presupuesto."
-        icon={ChartNoAxesCombined}
-        title="Todavía no hay un hogar"
-      />
-    );
-  }
+  if (dashboard.isPending) return <LoadingState />;
   if (dashboard.isError) return <ErrorState description={dashboard.error.message} onRetry={dashboard.refetch} />;
 
   const data = dashboard.data;
@@ -100,6 +97,7 @@ export function PlanningPage() {
       <PageHeader
         title="Planificación mensual"
       />
+      {displayedPlanning?.personalHistoryRequiresConfirmation ? <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950" role="status">Esta preparación antigua no guardaba la identidad vinculada a cada persona. Sus datos originales se conservan, pero por privacidad no mostramos su desglose ni sus saldos personales históricos. <Link className="inline-flex min-h-11 items-center font-bold underline focus-visible:outline-2 focus-visible:outline-focus" to="/cuentas">Actualiza tu saldo en Cuentas</Link>. El presupuesto actual sigue calculándose con tus gastos y compras.</p> : null}
 
       {!data.budget.readiness.ready ? (
         <EmptyState
@@ -112,14 +110,15 @@ export function PlanningPage() {
         <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-card sm:p-7" aria-labelledby="saldos-confirmados">
           <h2 className="text-lg font-bold text-emerald-950" id="saldos-confirmados">Este mes ya está calculado</h2>
           <p className="mt-2 text-sm leading-6 text-emerald-900">
-            Ya hemos utilizado el saldo de la cuenta conjunta y los saldos personales para calcular las aportaciones y comprobar si las cuentas van bien.
+            Las aportaciones se calcularon con los saldos registrados al preparar el mes. Consulta en Inicio el presupuesto restante y su cobertura según los saldos actuales registrados.
           </p>
+          {currentPlanning.budgetChangedSincePreparation ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950" role="status">El presupuesto ha cambiado desde que preparaste el mes. Las aportaciones que ves se han actualizado con las obligaciones actuales, incluidas las compras. Conservamos los saldos confirmados y el registro de preparación original; revisa si necesitas aportar la diferencia. No se mueve dinero automáticamente.</p> : null}
         </section>
       ) : (
         <section className="rounded-3xl border border-border bg-surface p-5 shadow-card sm:p-7" aria-labelledby="confirmar-saldos">
           <h2 className="text-lg font-bold" id="confirmar-saldos">Confirmar saldos del mes</h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">
-            A principios de cada mes introduce el dinero disponible en la cuenta conjunta y en cada cuenta personal. Con esos saldos calcularemos las aportaciones, el margen y si cada cuenta va bien o está en números rojos.
+            Confirma los saldos registrados de la cuenta conjunta y de cada cuenta personal para estimar las aportaciones del mes. Este cálculo prepara el mes: no representa el presupuesto que queda por utilizar ni una consulta a tu banco.
           </p>
           <dl className="mt-5 grid gap-3 rounded-2xl bg-surface-muted p-4 sm:grid-cols-3">
             <div>
@@ -156,7 +155,7 @@ export function PlanningPage() {
               }
             }}
           >
-            <div>
+            <div className="min-w-0">
               <label className="text-sm font-bold" htmlFor="planning-date">Fecha de cálculo</label>
               <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="planning-date" onChange={(event) => setCalculationDate(event.target.value)} required type="date" value={calculationDate} />
             </div>
@@ -251,4 +250,15 @@ export function PlanningPage() {
       </Link>
     </div>
   );
+}
+
+export function PlanningPage() {
+  const { currentHousehold, isPending } = useHousehold();
+  if (isPending) return <LoadingState />;
+  if (!currentHousehold?.id) {
+    return <EmptyState action={<Link className="font-bold text-brand-strong" to="/hogar">Crear hogar</Link>} description="Configura primero las personas que participan en el presupuesto." icon={ChartNoAxesCombined} title="Todavía no hay un hogar" />;
+  }
+  // A household switch must discard balances, dates and mutation state from
+  // the previous household before any new planning can be submitted.
+  return <HouseholdPlanning currentHousehold={currentHousehold} key={currentHousehold.id} />;
 }

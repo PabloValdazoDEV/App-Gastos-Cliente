@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   saveVariableMonth: vi.fn(),
   variableExpenses: vi.fn(),
   variableStatistics: vi.fn(),
+  setBudgetMarginPreference: vi.fn(),
 }));
 
 vi.mock('../features/finance/financeService', () => ({
@@ -18,6 +19,7 @@ vi.mock('../features/finance/financeService', () => ({
     saveVariableMonth: mocks.saveVariableMonth,
     variableExpenses: mocks.variableExpenses,
     variableStatistics: mocks.variableStatistics,
+    setBudgetMarginPreference: mocks.setBudgetMarginPreference,
   },
 }));
 
@@ -42,11 +44,13 @@ function renderPage() {
   const client = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
-  return render(
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  const result = render(
     <QueryClientProvider client={client}>
       <VariableExpensesPage />
     </QueryClientProvider>,
   );
+  return { ...result, client, invalidate };
 }
 
 describe('VariableExpensesPage', () => {
@@ -64,7 +68,7 @@ describe('VariableExpensesPage', () => {
 
   it('guarda SUMMARY sin enviar apuntes detallados', async () => {
     const user = userEvent.setup();
-    renderPage();
+    const { invalidate } = renderPage();
 
     await screen.findByRole('heading', { name: 'No hay gastos variables' });
     await user.click(screen.getByRole('button', { name: 'Añadir el primer mes' }));
@@ -85,6 +89,31 @@ describe('VariableExpensesPage', () => {
       );
     });
     expect(mocks.saveVariableMonth.mock.calls[0][0].body).not.toHaveProperty('isComplete');
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
+  });
+
+  it('el margen pertenece al grupo recomendado, no al mes registrado', async () => {
+    const user = userEvent.setup();
+    const statistics = (enabled) => [{ categoryId: 'category-1', category: { name: 'Supermercado' }, ownerKey: 'HOUSEHOLD', scope: 'HOUSEHOLD', applySafetyMargin: enabled, effectiveMarginBps: enabled ? 1000 : 0, availableMarginBps: 1000, availableMarginSource: 'HOUSEHOLD', historicalAverageCents: 10_000, recommendedCents: enabled ? 11_000 : 10_000, averages: { months3: 10_000, months6: 10_000, months12: 10_000 }, completedMonths: 1 }];
+    mocks.variableStatistics.mockResolvedValue(statistics(false));
+    mocks.variableExpenses.mockResolvedValue([{ id: 'month-1', categoryId: 'category-1', category: { name: 'Supermercado' }, ownerKey: 'HOUSEHOLD', scope: 'HOUSEHOLD', year: 2026, month: 8, entryMode: 'SUMMARY', summaryAmountCents: 10_000, totalCents: 10_000 }]);
+    mocks.setBudgetMarginPreference.mockImplementation(async ({ body }) => {
+      mocks.variableStatistics.mockResolvedValue(statistics(body.applySafetyMargin));
+      return statistics(body.applySafetyMargin)[0];
+    });
+    renderPage();
+    const control = await screen.findByRole('checkbox', { name: /Aplicar margen al presupuesto recomendado/ });
+    expect(control).not.toBeChecked();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    const recommended = screen.getByText('Presupuesto recomendado').parentElement;
+    expect(recommended).toHaveTextContent('100,00');
+    await user.click(control);
+    await waitFor(() => expect(recommended).toHaveTextContent('110,00'));
+    await user.click(control);
+    await waitFor(() => expect(control).not.toBeChecked());
+    expect(recommended).toHaveTextContent('100,00');
+    expect(mocks.saveVariableMonth).not.toHaveBeenCalled();
+    expect(mocks.variableExpenses).toHaveBeenCalledTimes(1);
   });
 
   it('guarda un mes de gasto cero sin pedir confirmación adicional', async () => {
@@ -110,7 +139,7 @@ describe('VariableExpensesPage', () => {
 
   it('guarda DETAIL sin enviar un total resumen', async () => {
     const user = userEvent.setup();
-    renderPage();
+    const { invalidate } = renderPage();
 
     await screen.findByRole('heading', { name: 'No hay gastos variables' });
     await user.click(screen.getByRole('button', { name: 'Añadir el primer mes' }));
@@ -138,6 +167,7 @@ describe('VariableExpensesPage', () => {
         }),
       );
     });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
   });
 
   it('edita un mes existente con sus datos precargados', async () => {
@@ -156,7 +186,7 @@ describe('VariableExpensesPage', () => {
         year: 2026,
       },
     ]);
-    renderPage();
+    const { invalidate } = renderPage();
 
     await user.click(await screen.findByRole('button', { name: 'Editar gasto de Supermercado de Agosto de 2026' }));
     expect(await screen.findByRole('heading', { name: 'Editar gasto variable' })).toBeInTheDocument();
@@ -177,6 +207,7 @@ describe('VariableExpensesPage', () => {
         householdId: 'household-1',
       });
     });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
   });
 
   it('confirma antes de eliminar un mes variable', async () => {
@@ -193,7 +224,7 @@ describe('VariableExpensesPage', () => {
         year: 2026,
       },
     ]);
-    renderPage();
+    const { invalidate } = renderPage();
 
     await user.click(await screen.findByRole('button', { name: 'Eliminar gasto de Supermercado de Agosto de 2026' }));
     expect(mocks.deleteVariableMonth).not.toHaveBeenCalled();
@@ -206,6 +237,7 @@ describe('VariableExpensesPage', () => {
         variableMonthId: 'month-1',
       });
     });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
   });
 
   it('muestra el selector de fecha únicamente al pedir cambiarla', async () => {

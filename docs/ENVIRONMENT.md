@@ -12,7 +12,7 @@ Después, ajusta `.env` para tu entorno. Vite expone al navegador cualquier vari
 
 | Variable | Obligatoria | Ejemplo de desarrollo | Contenido secreto | Descripción |
 | --- | --- | --- | --- | --- |
-| `VITE_API_URL` | Sí | `http://localhost:3000/api` | No | URL base de la API REST, incluido el prefijo `/api` |
+| `VITE_API_URL` | Sí | `/api` | No | URL absoluta o ruta del mismo origen para la API REST, incluido el prefijo `/api` |
 | `VITE_CSRF_COOKIE_NAME` | Sí | `csrf_token` | No | Nombre público de la cookie double-submit; debe coincidir con `CSRF_COOKIE_NAME` del servidor |
 | `VITE_APP_NAME` | Sí | `BudgetApp` | No | Nombre visible de la aplicación |
 | `VITE_ENABLE_GOOGLE_LOGIN` | No | `false` | No | Muestra “Continuar con Google”; el backend también debe tener OAuth configurado |
@@ -24,7 +24,7 @@ Las flags solo aceptan literalmente `true` o `false`. Si falta una variable obli
 ## Configuración mínima de desarrollo
 
 ```env
-VITE_API_URL=http://localhost:3000/api
+VITE_API_URL=/api
 VITE_CSRF_COOKIE_NAME=csrf_token
 VITE_APP_NAME=BudgetApp
 VITE_ENABLE_GOOGLE_LOGIN=false
@@ -35,7 +35,7 @@ VITE_ENABLE_WEB_PUSH=false
 ## Configuración de producción
 
 - Usa siempre HTTPS para la aplicación y la API.
-- Define `VITE_API_URL` con la URL pública exacta de la API.
+- Define `VITE_API_URL` con `/api` si frontend y API comparten origen, o con la URL pública exacta de la API si se sirven por separado.
 - Configura CORS y las cookies en el servidor para el origen real del cliente.
 - Activa una feature únicamente cuando la integración y sus valores públicos estén listos.
 - Genera un build nuevo después de cambiar variables: Vite las incorpora durante la compilación.

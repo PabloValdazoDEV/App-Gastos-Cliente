@@ -4,6 +4,13 @@ import { defineConfig, loadEnv } from 'vite';
 
 import { parsePublicEnv } from './src/config/parsePublicEnv.js';
 
+const localApiProxy = {
+  '/api': {
+    changeOrigin: false,
+    target: 'http://127.0.0.1:3000',
+  },
+};
+
 export default defineConfig(({ command, mode }) => {
   if (command === 'build') {
     parsePublicEnv(loadEnv(mode, process.cwd(), 'VITE_'));
@@ -14,10 +21,12 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: '0.0.0.0',
       port: 5173,
+      proxy: localApiProxy,
       strictPort: true,
     },
     preview: {
       port: 4173,
+      proxy: localApiProxy,
     },
     test: {
       css: true,

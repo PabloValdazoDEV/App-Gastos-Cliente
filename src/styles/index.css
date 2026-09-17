@@ -80,6 +80,35 @@ a[href] {
   cursor: pointer;
 }
 
+/* Native date controls must fit their grid cell, including outside FormField.
+   Keep the native picker and its indicator: do not clip the containing card. */
+input[type="date"],
+input[type="month"] {
+  /* iOS can add padding outside width: 100% with the native appearance,
+     even with border-box: https://bugs.webkit.org/show_bug.cgi?id=301648
+     Only reset the frame; the date/month picker remains native. */
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* WebKit's inner date value also needs to be allowed to shrink. */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
+/* Use available form width, not viewport width: forms also appear in narrow
+   sidebar layouts and nested payment-history panels. Stack before crowding. */
+.date-fields-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
 ::selection {
   background: var(--app-color-brand-soft);
   color: var(--app-color-brand-deep);

@@ -89,6 +89,7 @@ describe('SimulatorPage', () => {
     expect(screen.getByText(/Quedan 10 días/)).toBeInTheDocument();
     expect(screen.getByText('Reservado a fecha')).toBeInTheDocument();
     expect(screen.getByText('Objetivo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fecha a simular').parentElement).toHaveClass('min-w-0');
   });
 
   it('compara la aportación inmediata antes de proponer repartir el déficit', async () => {

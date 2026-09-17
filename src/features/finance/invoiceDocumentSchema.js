@@ -1,45 +1,15 @@
 import { z } from 'zod';
+import {
+  DOCUMENT_ACCEPT as INVOICE_DOCUMENT_ACCEPT,
+  DOCUMENT_CONTENT_TYPES,
+  DOCUMENT_MAX_BYTES as INVOICE_DOCUMENT_MAX_BYTES,
+  getDocumentContentType as getInvoiceDocumentContentType,
+} from '../documents/documentFiles';
 
-export const INVOICE_DOCUMENT_MAX_BYTES = 10 * 1_024 * 1_024;
+export { INVOICE_DOCUMENT_ACCEPT, INVOICE_DOCUMENT_MAX_BYTES, getInvoiceDocumentContentType };
+export { formatDocumentSize } from '../documents/documentFiles';
 export const INVOICE_DOCUMENT_MAX_COUNT = 5;
-export const INVOICE_DOCUMENT_ACCEPT = [
-  '.pdf',
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.webp',
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-].join(',');
-
-const acceptedContentTypes = new Set([
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-]);
-const contentTypeByExtension = Object.freeze({
-  jpeg: 'image/jpeg',
-  jpg: 'image/jpeg',
-  pdf: 'application/pdf',
-  png: 'image/png',
-  webp: 'image/webp',
-});
-
-export function getInvoiceDocumentContentType(file) {
-  const declaredType = typeof file?.type === 'string'
-    ? file.type.trim().toLowerCase()
-    : '';
-
-  if (declaredType) return declaredType;
-
-  const extension = typeof file?.name === 'string'
-    ? file.name.split('.').pop()?.toLowerCase()
-    : '';
-  return contentTypeByExtension[extension] ?? '';
-}
+const acceptedContentTypes = new Set(DOCUMENT_CONTENT_TYPES);
 
 export const invoiceDocumentFileSchema = z
   .custom(
@@ -102,22 +72,4 @@ export function validateInvoiceDocumentSelection(files, existingCount = 0) {
   }
 
   return { error: null, files: result.data };
-}
-
-export function formatDocumentSize(sizeBytes) {
-  const size = Number(sizeBytes);
-
-  if (!Number.isFinite(size) || size < 0) return 'Tamaño no disponible';
-  if (size < 1_024) return `${size} B`;
-
-  const units = [
-    ['MiB', 1_024 * 1_024],
-    ['KiB', 1_024],
-  ];
-  const [unit, divisor] = units.find(([, threshold]) => size >= threshold);
-  const value = size / divisor;
-
-  return `${new Intl.NumberFormat('es-ES', {
-    maximumFractionDigits: value >= 10 ? 0 : 1,
-  }).format(value)} ${unit}`;
 }

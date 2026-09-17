@@ -2,6 +2,7 @@ import {
   Bell,
   ChevronRight,
   Settings,
+  ShoppingBag,
   SlidersHorizontal,
   UsersRound,
   WalletCards,
@@ -11,6 +12,12 @@ import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
 
 const secondarySections = [
+  {
+    description: 'Tus compras importantes, productos y garantías.',
+    icon: ShoppingBag,
+    title: 'Compras',
+    to: '/compras',
+  },
   {
     description: 'Saldo de la cuenta conjunta y de las cuentas personales.',
     icon: WalletCards,

@@ -14,6 +14,10 @@ export const queryKeys = Object.freeze({
         : ['householdCategories', householdId],
   },
   dashboard: (householdId, period) => ['dashboard', householdId, period],
+  budget: (householdId) => ['budget', householdId],
+  budgetMarginPreferences: (householdId) => ['budgetMarginPreferences', householdId],
+  invoiceStatistics: (householdId) => ['invoiceStatistics', householdId],
+  variableStatistics: (householdId) => ['variableStatistics', householdId],
   recurringExpenses: {
     all: (householdId) => ['recurringExpenses', householdId],
     detail: (householdId, expenseId) => [
@@ -74,6 +78,12 @@ export const queryKeys = Object.freeze({
     ],
   },
   calendar: (householdId, period) => ['calendar', householdId, period],
+  purchases: {
+    all: (householdId) => ['purchases', householdId],
+    detail: (householdId, purchaseId) => ['purchases', householdId, 'detail', purchaseId],
+    documents: (householdId, purchaseId) => ['purchases', householdId, 'documents', purchaseId],
+    analyses: (householdId, purchaseId, documentId) => ['purchases', householdId, 'analyses', purchaseId, ...(documentId ? [documentId] : [])],
+  },
   notifications: {
     all: () => ['notifications'],
     unreadCount: () => ['notifications', 'unreadCount'],

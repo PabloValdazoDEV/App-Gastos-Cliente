@@ -20,6 +20,12 @@ describe('parsePublicEnv', () => {
     });
   });
 
+  it('acepta una ruta de API relativa al mismo origen', () => {
+    expect(
+      parsePublicEnv({ ...validEnv, VITE_API_URL: '/api/' }).apiUrl,
+    ).toBe('/api');
+  });
+
   it('falla con un mensaje accionable si falta la URL de API', () => {
     expect(() =>
       parsePublicEnv({ ...validEnv, VITE_API_URL: undefined }),

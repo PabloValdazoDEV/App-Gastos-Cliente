@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -13,12 +13,15 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { AuthError, SubmitButton } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
 import { financeService } from '../features/finance/financeService';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
+import { SafetyMarginCheckbox } from '../features/finance/SafetyMarginCheckbox';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { CategoryIconBadge } from '../features/households/categoryIcons';
 import { useHousehold } from '../features/households/useHousehold';
 import {
   ConfirmationDialog,
+  ExpenseFilters,
   FormCard,
   HouseholdGate,
   SelectField,
@@ -33,6 +36,7 @@ import {
 
 const oneTimeSchema = z
   .object({
+    applySafetyMargin: z.boolean().default(false),
     amount: positiveMoneyInputSchema,
     categoryId: z.string().min(1, 'Selecciona una categoría.'),
     expenseDate: z.string().min(1, 'Indica la fecha del gasto.'),
@@ -59,8 +63,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.oneTimeExpenses(householdId) }),
-        queryClient.invalidateQueries({ queryKey: ['budget', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       toast.success(isEditing ? 'Gasto puntual actualizado.' : 'Gasto puntual guardado.');
       onClose();
@@ -73,6 +76,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
     watch,
   } = useForm({
     defaultValues: {
+      applySafetyMargin: initialExpense?.applySafetyMargin ?? false,
       amount: Number.isSafeInteger(initialExpense?.amountCents)
         ? (initialExpense.amountCents / 100).toFixed(2)
         : '',
@@ -92,6 +96,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
         householdId,
         ...(isEditing ? { expenseId: initialExpense.id } : {}),
         body: {
+          applySafetyMargin: values.applySafetyMargin,
           amountCents: eurosInputToCents(values.amount),
           categoryId: values.categoryId,
           expenseDate: values.expenseDate,
@@ -166,6 +171,12 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
               ))}
             </SelectField>
           ) : null}
+          <SafetyMarginCheckbox
+            disabled={save.isPending}
+            help="Si lo activas se aplicará el margen de su categoría o, si no tiene uno propio, el margen general del hogar."
+            label="Aplicar margen de seguridad a este gasto"
+            {...register('applySafetyMargin')}
+          />
           <TextareaField
             error={errors.notes?.message}
             label="Notas (opcional)"
@@ -215,8 +226,7 @@ export function OneTimeExpensesPage() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.oneTimeExpenses(householdId) }),
-        queryClient.invalidateQueries({ queryKey: ['budget', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       setDeletingId(null);
       toast.success('Gasto puntual eliminado.');
@@ -289,17 +299,24 @@ export function OneTimeExpensesPage() {
               <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Receipt aria-hidden="true" className="size-5" /></span>
               <div><h2 className="text-xl font-extrabold tracking-tight" id="lista-gastos-puntuales">Gastos registrados</h2><p className="text-sm text-text-muted">Se incorporan al cálculo del mes de su fecha.</p></div>
             </div>
-            <div className="mt-4 grid gap-3 rounded-2xl border border-border bg-surface p-4 shadow-card sm:items-end sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
-              <label className="relative block"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 size-4 text-text-soft" /><span className="sr-only">Buscar gastos puntuales</span><input className="min-h-11 w-full rounded-xl border border-border-strong bg-surface pl-10 pr-3 text-sm text-text outline-none focus:border-focus focus:ring-2 focus:ring-focus/20" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, categoría o nota" value={search} /></label>
-              <SelectField label="Tipo" onChange={(event) => setScopeFilter(event.target.value)} value={scopeFilter}><option value="ALL">Todos</option><option value="HOUSEHOLD">Comunes</option><option value="PERSONAL">Personales</option></SelectField>
-              <SelectField label="Categoría" onChange={(event) => setCategoryFilter(event.target.value)} value={categoryFilter}><option value="ALL">Todas</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</SelectField>
+            <div className="mt-4">
+              <ExpenseFilters
+                categories={categories}
+                categoryId={categoryFilter}
+                onCategoryChange={setCategoryFilter}
+                onScopeChange={setScopeFilter}
+                onSearchChange={setSearch}
+                scope={scopeFilter}
+                search={search}
+                searchLabel="Buscar gastos puntuales"
+              />
             </div>
             {visibleExpenses.length === 0 ? <p className="mt-4 rounded-2xl border border-dashed border-border-strong p-6 text-center text-sm text-text-muted">No hay gastos que coincidan con la búsqueda.</p> : (
               <ul className="mt-4 space-y-3">
                 {visibleExpenses.map((expense) => (
                   <li className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-card" key={expense.id}>
                     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="truncate font-extrabold text-text">{expense.name}</h3><p className="mt-1 text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
+                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="break-words font-extrabold text-text">{expense.name}</h3><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
                       <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => { setEditingId(expense.id); setShowForm(true); }} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
                     </div>
                   </li>

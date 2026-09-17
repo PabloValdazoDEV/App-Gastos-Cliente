@@ -1,5 +1,5 @@
-import { Search, TriangleAlert, WalletCards, X } from 'lucide-react';
-import { useEffect, useId, useRef } from 'react';
+import { ChevronDown, Filter, Search, TriangleAlert, WalletCards, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
@@ -11,7 +11,7 @@ export function SelectField({ children, error, label, name, ...props }) {
   const errorId = `${id}-error`;
 
   return (
-    <div>
+    <div className="min-w-0">
       <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={id}>
         {label}
       </label>
@@ -35,39 +35,112 @@ export function SelectField({ children, error, label, name, ...props }) {
 }
 
 export function ExpenseFilters({
+  additionalFilters = [],
   categories = [],
-  categoryId,
+  categoryId = 'ALL',
   onCategoryChange,
   onScopeChange,
   onSearchChange,
-  search,
+  search = '',
+  searchLabel = 'Buscar gastos',
   scope = 'ALL',
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const panelId = useId();
+  const searchId = useId();
+  const toggleRef = useRef(null);
+  const searchRef = useRef(null);
+  const filters = [
+    ...(onScopeChange ? [{
+      id: 'scope', label: 'Ámbito', value: scope, onChange: onScopeChange,
+      options: [
+        { value: 'ALL', label: 'Todos' },
+        { value: 'HOUSEHOLD', label: 'Comunes' },
+        { value: 'PERSONAL', label: 'Personales' },
+      ],
+    }] : []),
+    ...(onCategoryChange ? [{
+      id: 'category', label: 'Categoría', value: categoryId, onChange: onCategoryChange,
+      options: [
+        { value: 'ALL', label: 'Todas' },
+        ...categories.map((category) => ({ value: category.id, label: category.name })),
+      ],
+    }] : []),
+    ...additionalFilters,
+  ];
+  const activeCount = filters.filter((filter) => filter.value !== (filter.defaultValue ?? 'ALL')).length;
+  const canClear = activeCount > 0 || search.length > 0;
+
+  function clearFilters() {
+    onSearchChange('');
+    filters.forEach((filter) => filter.onChange(filter.defaultValue ?? 'ALL'));
+    searchRef.current?.focus();
+  }
+
   return (
-    <div className="grid min-w-0 gap-3 rounded-2xl border border-border bg-surface p-4 shadow-card sm:items-end sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
-      <label className="relative block min-w-0">
-        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 size-4 text-text-soft" />
-        <span className="sr-only">Buscar gastos</span>
-        <input
-          className="min-h-11 w-full min-w-0 rounded-xl border border-border-strong bg-surface pl-10 pr-3 text-sm text-text outline-none focus:border-focus focus:ring-2 focus:ring-focus/20"
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Buscar por nombre, categoría o nota"
-          value={search}
-        />
-      </label>
-      <SelectField label="Tipo" onChange={(event) => onScopeChange(event.target.value)} value={scope}>
-        <option value="ALL">Todos</option>
-        <option value="HOUSEHOLD">Comunes</option>
-        <option value="PERSONAL">Personales</option>
-      </SelectField>
-      <SelectField label="Categoría" onChange={(event) => onCategoryChange(event.target.value)} value={categoryId}>
-        <option value="ALL">Todas</option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </SelectField>
+    <div className="min-w-0 rounded-2xl border border-border bg-surface p-3 shadow-card sm:p-4">
+      <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={searchId}>{searchLabel}</label>
+      <div className="flex items-end gap-2 sm:gap-3">
+          <div className="relative min-w-0 flex-1">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-4 size-4 text-text-soft" />
+            <input
+              className="min-h-12 w-full min-w-0 rounded-xl border border-border-strong bg-surface pl-10 pr-3 text-base text-text outline-none focus:border-focus focus:ring-2 focus:ring-focus/20"
+              onChange={(event) => onSearchChange(event.target.value)}
+              id={searchId}
+              placeholder="Nombre, categoría o nota"
+              ref={searchRef}
+              type="search"
+              value={search}
+            />
+          </div>
+        <button
+          aria-controls={panelId}
+          aria-expanded={expanded}
+          className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          onClick={() => setExpanded((current) => !current)}
+          ref={toggleRef}
+          type="button"
+        >
+          <Filter aria-hidden="true" className="size-4 shrink-0" />
+          Filtros
+          {activeCount > 0 ? (
+            <span className="rounded-full bg-brand-soft px-1.5 py-0.5 text-xs text-brand-strong">
+              {activeCount}<span className="sr-only"> {activeCount === 1 ? 'activo' : 'activos'}</span>
+            </span>
+          ) : null}
+          <ChevronDown aria-hidden="true" className={`hidden size-4 sm:block ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      <div
+        hidden={!expanded}
+        id={panelId}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            setExpanded(false);
+            toggleRef.current?.focus();
+          }
+        }}
+      >
+        <div className="mt-4 grid min-w-0 gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filters.map((filter) => (
+            <SelectField key={filter.id} label={filter.label} onChange={(event) => filter.onChange(event.target.value)} value={filter.value}>
+              {filter.options.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </SelectField>
+          ))}
+        </div>
+      </div>
+      {canClear ? (
+        <button
+          className="mt-2 inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-bold text-brand-strong underline underline-offset-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          onClick={clearFilters}
+          type="button"
+        >
+          Limpiar filtros
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -104,17 +177,17 @@ export function TextareaField({ error, help, label, name, ...props }) {
   );
 }
 
-export function FormCard({ children, description, onClose, title }) {
+export function FormCard({ children, compact = false, description, onClose, title }) {
   const titleId = useId();
 
   return (
     <section
       aria-labelledby={titleId}
-      className="rounded-3xl border border-border bg-surface p-5 shadow-card sm:p-7"
+      className={`min-w-0 border border-border bg-surface shadow-card ${compact ? 'rounded-xl p-3 sm:p-5' : 'rounded-3xl p-5 sm:p-7'}`}
     >
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold tracking-tight text-text" id={titleId}>
+        <div className="min-w-0">
+          <h2 className="break-words text-xl font-extrabold tracking-tight text-text" id={titleId}>
             {title}
           </h2>
           {description ? (

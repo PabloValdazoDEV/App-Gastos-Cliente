@@ -5,6 +5,7 @@ const clientMocks = vi.hoisted(() => ({
   get: vi.fn(),
   patch: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
 }));
 
 vi.mock('../../api/client', () => ({
@@ -16,6 +17,14 @@ import { financeService } from './financeService';
 describe('financeService · documentos de factura', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('consulta y guarda las preferencias del grupo sin escribir históricos', async () => {
+    const body = { expenseType: 'VARIABLE', categoryId: 'category', scope: 'HOUSEHOLD', personalPersonId: null, applySafetyMargin: true };
+    await financeService.budgetMarginPreferences('home');
+    await financeService.setBudgetMarginPreference({ householdId: 'home', body });
+    expect(clientMocks.get).toHaveBeenCalledWith('/households/home/budget-margin-preferences');
+    expect(clientMocks.put).toHaveBeenCalledWith('/households/home/budget-margin-preferences', body);
   });
 
   it('normaliza la colección pública de metadatos', async () => {

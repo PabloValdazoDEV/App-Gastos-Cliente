@@ -2,7 +2,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { forwardRef, useId, useState } from 'react';
 
 const inputClasses = [
-  'min-h-12 w-full rounded-xl border border-border-strong bg-surface px-3.5 py-2.5 text-base text-text shadow-sm outline-none transition-colors',
+  'box-border min-h-12 w-full min-w-0 max-w-full rounded-xl border border-border-strong bg-surface px-3.5 py-2.5 text-base text-text shadow-sm outline-none transition-colors',
   'placeholder:text-text-soft focus:border-brand focus:ring-3 focus:ring-brand-soft',
   'disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-muted',
 ].join(' ');
@@ -28,7 +28,7 @@ export const FormField = forwardRef(function FormField(
   const describedBy = error ? errorId : help ? helpId : undefined;
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={inputId}>
         {label}
       </label>
