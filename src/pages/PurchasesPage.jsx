@@ -8,6 +8,7 @@ import { queryKeys } from '../api/queryKeys';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
+import { MonthGroupedList } from '../components/ui/MonthGroupedList';
 import { formatCents } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
@@ -71,11 +72,11 @@ function PurchasesContent({ household }) {
         !showForm ? <EmptyState title="Todavía no has guardado ninguna compra" description="Guarda compras importantes para tener localizados sus productos y garantías." icon={ShoppingBag} action={addButton} /> : null
       ) : <section aria-label="Compras guardadas" className="min-w-0 space-y-4">
         <PurchaseFilters search={search} ownership={ownership} warranty={warranty} onSearchChange={setSearch} onOwnershipChange={setOwnership} onWarrantyChange={setWarranty} />
-        <p aria-live="polite" className="text-sm text-text-muted">{visible.length} {visible.length === 1 ? 'compra' : 'compras'} · Más recientes primero</p>
-        {visible.length === 0 ? <p className="rounded-2xl border border-dashed border-border-strong p-5 text-sm text-text-muted">No hay compras que coincidan. Prueba otra búsqueda o limpia los filtros.</p> : <ul className="grid min-w-0 gap-4 lg:grid-cols-2">
-          {visible.map((purchase) => <li className="min-w-0" key={purchase.id}>
+        <p aria-live="polite" className="text-sm text-text-muted">{visible.length} {visible.length === 1 ? 'compra' : 'compras'} · Por fecha de compra, agrupadas por año y mes · Más recientes primero</p>
+        {visible.length === 0 ? <p className="rounded-2xl border border-dashed border-border-strong p-5 text-sm text-text-muted">No hay compras que coincidan. Prueba otra búsqueda o limpia los filtros.</p> : <MonthGroupedList items={visible} getDate={(purchase) => purchase.purchaseDate} yearHeadingLevel={2} listClassName="grid min-w-0 gap-4 lg:grid-cols-2"
+          renderItem={(purchase) => <li className="min-w-0" key={purchase.id}>
             <Link aria-labelledby={`purchase-${purchase.id}-title`} aria-describedby={`purchase-${purchase.id}-action`} className="group flex h-full min-w-0 cursor-pointer flex-col rounded-2xl border border-border bg-surface p-5 shadow-card transition-colors hover:border-brand hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to={`/compras/${purchase.id}`}>
-              <h2 className="break-words text-xl font-extrabold text-brand-strong [overflow-wrap:anywhere]" id={`purchase-${purchase.id}-title`}>{purchaseTitle(purchase)}</h2>
+              <h4 className="break-words text-xl font-extrabold text-brand-strong [overflow-wrap:anywhere]" id={`purchase-${purchase.id}-title`}>{purchaseTitle(purchase)}</h4>
               {(purchase.items?.length ?? 0) > 1 ? <p className="mt-1 text-sm font-bold">{purchase.items.length} productos</p> : null}
               <p className="mt-1 break-words text-sm text-text-muted">{purchase.merchant || 'Tienda sin indicar'}</p>
               <p className="mt-4 break-words text-2xl font-extrabold tabular-nums">{formatCents(purchase.totalCents, currency)}</p>
@@ -83,8 +84,8 @@ function PurchasesContent({ household }) {
               <div className="mt-4 border-t border-border pt-4"><PurchaseWarrantySummary items={purchase.items} /></div>
               <div className="mt-auto pt-4"><span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-soft px-4 py-2.5 text-sm font-bold text-brand-strong group-hover:bg-brand group-hover:text-on-brand group-focus-visible:bg-brand group-focus-visible:text-on-brand" id={`purchase-${purchase.id}-action`}>Ver compra<ArrowRight aria-hidden="true" className="size-4 shrink-0" /></span></div>
             </Link>
-          </li>)}
-        </ul>}
+          </li>}
+        />}
       </section>}
     </div>
   );

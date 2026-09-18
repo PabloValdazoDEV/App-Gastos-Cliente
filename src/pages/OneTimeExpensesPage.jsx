@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
@@ -10,6 +10,8 @@ import { queryKeys } from '../api/queryKeys';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
+import { MonthGroupedList } from '../components/ui/MonthGroupedList';
+import { FormDialog } from '../components/ui/FormDialog';
 import { AuthError, SubmitButton } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
 import { financeService } from '../features/finance/financeService';
@@ -24,7 +26,6 @@ import { linkedPurchaseExpenses, useLinkedPurchaseExpenses } from '../features/p
 import {
   ConfirmationDialog,
   ExpenseFilters,
-  FormCard,
   HouseholdGate,
   SelectField,
   TextareaField,
@@ -57,8 +58,9 @@ const oneTimeSchema = z
     }
   });
 
-function OneTimeForm({ categories, householdId, initialExpense, onClose, people }) {
+function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyChange, people }) {
   const queryClient = useQueryClient();
+  const formRef = useRef(null);
   const isEditing = Boolean(initialExpense);
   const save = useMutation({
     mutationFn: isEditing ? financeService.updateOneTimeExpense : financeService.createOneTimeExpense,
@@ -71,6 +73,8 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
       onClose();
     },
   });
+  useEffect(() => { onBusyChange(save.isPending); }, [onBusyChange, save.isPending]);
+  useEffect(() => { formRef.current?.querySelector('input')?.focus({ preventScroll: true }); }, []);
   const {
     formState: { errors },
     handleSubmit,
@@ -93,6 +97,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
   });
   const scope = watch('scope');
   const onSubmit = handleSubmit(async (values) => {
+    if (save.isPending) return;
     try {
       await save.mutateAsync({
         householdId,
@@ -114,17 +119,14 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
   });
 
   return (
-    <FormCard
-      description="Registra una compra o pago excepcional para tenerlo en cuenta en el mes indicado."
-      onClose={onClose}
-      title={isEditing ? 'Editar gasto puntual' : 'Añadir gasto puntual'}
-    >
+    <>
       {categories.length === 0 ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           Necesitas al menos una categoría activa antes de añadir un gasto.
         </p>
       ) : (
-        <form className="space-y-5" noValidate onSubmit={onSubmit}>
+        <form aria-busy={save.isPending} noValidate onSubmit={onSubmit} ref={formRef}>
+          <fieldset className="min-w-0 space-y-5" disabled={save.isPending}>
           <div className="grid gap-5 sm:grid-cols-2">
             <FormField error={errors.name?.message} label="Nombre" {...register('name')} />
             <FormField
@@ -186,12 +188,16 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, people 
             {...register('notes')}
           />
           <AuthError error={save.error} />
-          <SubmitButton isPending={save.isPending} pendingLabel="Guardando…">
-            {isEditing ? 'Guardar cambios' : 'Guardar gasto'}
-          </SubmitButton>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button className="min-h-12 rounded-xl border border-border-strong px-4 py-3 text-sm font-bold hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60" onClick={onClose} type="button">Cancelar</button>
+            <SubmitButton isPending={save.isPending} pendingLabel="Guardando…">
+              {isEditing ? 'Guardar cambios' : 'Guardar gasto'}
+            </SubmitButton>
+          </div>
+          </fieldset>
         </form>
       )}
-    </FormCard>
+    </>
   );
 }
 
@@ -207,6 +213,7 @@ export function OneTimeExpensesPage() {
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [formBusy, setFormBusy] = useState(false);
   const expenses = useQuery({
     enabled: Boolean(householdId),
     queryFn: () => financeService.oneTimeExpenses(householdId),
@@ -251,6 +258,14 @@ export function OneTimeExpensesPage() {
   }, [categoryFilter, expenses.data, scopeFilter, search]);
   const editingExpense = expenses.data?.find((expense) => expense.id === editingId);
   const deletingExpense = expenses.data?.find((expense) => expense.id === deletingId);
+  const openForm = (expenseId) => {
+    setEditingId(expenseId);
+    setFormBusy(false);
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+  };
 
   return (
     <div className="space-y-8">
@@ -259,7 +274,7 @@ export function OneTimeExpensesPage() {
         {household.currentHousehold ? (
           <button
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-extrabold text-on-brand shadow-sm hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            onClick={() => { setEditingId(null); setShowForm(true); }}
+            onClick={() => openForm(null)}
             type="button"
           >
             <Plus aria-hidden="true" className="size-5" />
@@ -268,7 +283,6 @@ export function OneTimeExpensesPage() {
         ) : null}
       </div>
       <HouseholdGate household={household}>
-        <PurchaseLinkedExpenses query={purchases} householdId={householdId} currency={currency} kind="ONE_TIME" timezone={household.currentHousehold?.timezone} />
         {deletingExpense ? (
           <ConfirmationDialog
             confirmLabel="Eliminar gasto"
@@ -280,28 +294,32 @@ export function OneTimeExpensesPage() {
             title="¿Eliminar este gasto puntual?"
           />
         ) : null}
-        {showForm ? (
-          categoriesQuery.isPending || peopleQuery.isPending ? (
+        {showForm ? <FormDialog busy={formBusy} title={editingId ? 'Editar gasto puntual' : 'Añadir gasto puntual'} description="Registra una compra o pago excepcional para tenerlo en cuenta en el mes indicado." onClose={closeForm}>
+          {categoriesQuery.isPending || peopleQuery.isPending ? (
             <LoadingState label="Preparando formulario" />
           ) : categoriesQuery.isError || peopleQuery.isError ? (
             <ErrorState description={(categoriesQuery.error ?? peopleQuery.error)?.message} onRetry={() => { categoriesQuery.refetch(); peopleQuery.refetch(); }} title="No se puede preparar el formulario" />
           ) : (
             <OneTimeForm
+              key={`${householdId}:${editingId ?? 'new'}`}
               categories={categories}
               householdId={householdId}
               initialExpense={editingExpense}
-              onClose={() => setShowForm(false)}
+              onClose={closeForm}
+              onBusyChange={setFormBusy}
               people={people}
             />
-          )
-        ) : null}
+          )}
+          {!categoriesQuery.isSuccess || !peopleQuery.isSuccess ? <button className="mt-3 min-h-11 rounded-xl border border-border-strong px-4 py-2 text-sm font-bold hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={closeForm} type="button">Cancelar</button> : null}
+        </FormDialog> : null}
+        <PurchaseLinkedExpenses query={purchases} householdId={householdId} currency={currency} kind="ONE_TIME" timezone={household.currentHousehold?.timezone} />
         {expenses.isPending ? <LoadingState label="Cargando gastos puntuales" /> : null}
         {expenses.isError ? <ErrorState description={expenses.error.message} onRetry={expenses.refetch} title="No se han podido cargar los gastos puntuales" /> : null}
         {expenses.isSuccess && expenses.data.length > 0 ? (
           <section aria-labelledby="lista-gastos-puntuales">
             <div className="flex items-center gap-3">
               <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Receipt aria-hidden="true" className="size-5" /></span>
-              <div><h2 className="text-xl font-extrabold tracking-tight" id="lista-gastos-puntuales">Gastos registrados</h2><p className="text-sm text-text-muted">Se incorporan al cálculo del mes de su fecha.</p></div>
+              <div><h2 className="text-xl font-extrabold tracking-tight" id="lista-gastos-puntuales">Gastos registrados</h2><p className="text-sm text-text-muted">Agrupados por año y mes del gasto, más recientes primero. Se incorporan al cálculo del mes de su fecha.</p></div>
             </div>
             <div className="mt-4">
               <ExpenseFilters
@@ -316,20 +334,20 @@ export function OneTimeExpensesPage() {
               />
             </div>
             {visibleExpenses.length === 0 ? <p className="mt-4 rounded-2xl border border-dashed border-border-strong p-6 text-center text-sm text-text-muted">No hay gastos que coincidan con la búsqueda.</p> : (
-              <ul className="mt-4 space-y-3">
-                {visibleExpenses.map((expense) => (
+              <MonthGroupedList className="mt-4" items={visibleExpenses} getDate={(expense) => expense.expenseDate}
+                renderItem={(expense) => (
                   <li className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-card" key={expense.id}>
                     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="break-words font-extrabold text-text">{expense.name}</h3><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
-                      <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => { setEditingId(expense.id); setShowForm(true); }} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
+                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h5 className="break-words font-extrabold text-text">{expense.name}</h5><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
+                      <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => openForm(expense.id)} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
                     </div>
                   </li>
-                ))}
-              </ul>
+                )}
+              />
             )}
           </section>
         ) : null}
-        {expenses.isSuccess && expenses.data.length === 0 && !linkedPurchaseExpenses(purchases.data, 'ONE_TIME').length ? <EmptyState action={<button className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-on-brand hover:bg-brand-hover" onClick={() => setShowForm(true)} type="button">Añadir el primer gasto</button>} description="Registra compras o pagos excepcionales que no se repiten cada mes." icon={Receipt} title="No hay gastos puntuales" /> : null}
+        {expenses.isSuccess && expenses.data.length === 0 && !linkedPurchaseExpenses(purchases.data, 'ONE_TIME').length ? <EmptyState action={<button className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-on-brand hover:bg-brand-hover" onClick={() => openForm(null)} type="button">Añadir el primer gasto</button>} description="Registra compras o pagos excepcionales que no se repiten cada mes." icon={Receipt} title="No hay gastos puntuales" /> : null}
       </HouseholdGate>
     </div>
   );

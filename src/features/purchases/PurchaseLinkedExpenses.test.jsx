@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -13,9 +13,9 @@ const financed = { id: 'financed', paymentMethod: 'FINANCED', totalCents: 10000,
   progress: { pendingCents: 10000, totalCostCents: 11000, costOfFinancingCents: 1000, paidInstallmentCount: 0, installmentCount: 3, nextInstallment: { sequence: 1, expectedAmountCents: 3334, dueDate: '2027-01-31' } },
   installments: [{ id: 'installment', sequence: 1, dueDate: '2027-01-31', status: 'PLANNED', expectedAmountCents: 3334, canRegisterPayment: true }],
 } };
-function setup(kind) {
+function setup(kind, purchases = [upfront, financed]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><MemoryRouter><PurchaseLinkedExpenses householdId="home" currency="EUR" kind={kind} query={{ data: [upfront, financed] }} /></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><PurchaseLinkedExpenses householdId="home" currency="EUR" kind={kind} query={{ data: purchases }} /></MemoryRouter></QueryClientProvider>);
 }
 describe('automatic linked purchase expenses', () => {
   it('shows the single actual payment and financing entry in Puntuales, without installments', () => {
@@ -35,6 +35,18 @@ describe('automatic linked purchase expenses', () => {
     expect(screen.getByText(/Coste total con entrada/)).toHaveTextContent('110,00');
     await user.click(screen.getByRole('button', { name: 'Ver y registrar cuotas' }));
     expect(await screen.findByRole('button', { name: 'Marcar cuota 1 como pagada' })).toBeVisible();
+  });
+  it('groups actual payments and down payments by payment date, keeping unpaid purchases visible', () => {
+    setup('ONE_TIME', [
+      { ...upfront, purchaseDate: '2025-12-30', paymentDate: '2026-01-01' },
+      { ...financed, financing: { ...financed.financing, downPaymentPaidAt: '2025-12-31' } },
+      { ...upfront, id: 'pending', paymentDate: null, items: [{ name: 'Sin pagar' }] },
+    ]);
+    const january = within(screen.getByRole('region', { name: '2026' })).getByRole('region', { name: 'Enero' });
+    expect(within(january).getByRole('heading', { name: 'Microondas' })).toBeVisible();
+    const december = within(screen.getByRole('region', { name: '2025' })).getByRole('region', { name: 'Diciembre' });
+    expect(within(december).getByRole('heading', { name: 'Móvil · Entrada' })).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Sin fecha de pago' })).getByRole('heading', { name: 'Sin pagar' })).toBeVisible();
   });
   it('excludes archived purchases and nonexistent entries, and provides an independent search', async () => {
     expect(linkedPurchaseExpenses([{ ...upfront, archivedAt: '2026-09-17' }, { ...financed, financing: { ...financed.financing, downPaymentCents: 0 } }], 'ONE_TIME')).toEqual([]);

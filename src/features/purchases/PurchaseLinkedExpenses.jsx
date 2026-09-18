@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { queryKeys } from '../../api/queryKeys';
 import { ErrorState, LoadingState } from '../../components/ui/FeedbackStates';
+import { MonthGroupedList } from '../../components/ui/MonthGroupedList';
 import { FormField } from '../auth/components/FormField';
 import { formatCents } from '../finance/money';
 import { linkedPurchaseExpenses } from './linkedPurchaseExpenses';
@@ -19,6 +20,7 @@ function LinkedExpense({ purchase, householdId, kind, currency, timezone }) {
   const id = useId();
   const detail = useQuery({ queryKey: queryKeys.purchases.detail(householdId, purchase.id), queryFn: ({ signal }) => purchasesService.detail({ householdId, purchaseId: purchase.id, signal }), enabled: expanded });
   const recurring = kind === 'RECURRING';
+  const Heading = recurring ? 'h3' : 'h5';
   const financing = purchase.financing;
   const entry = !recurring && purchase.paymentMethod === 'FINANCED';
   const paidAt = entry ? financing.downPaymentPaidAt : purchase.paymentDate;
@@ -28,7 +30,7 @@ function LinkedExpense({ purchase, householdId, kind, currency, timezone }) {
   const lastAmount = recurring ? financing.financingTotalCents - (financing.installmentCount - 1) * financing.installmentAmountCents : null;
   return <li className="min-w-0 space-y-4 rounded-2xl border border-border bg-surface p-5 shadow-card">
     <div className="flex min-w-0 flex-col justify-between gap-3 sm:flex-row">
-      <div className="min-w-0"><h3 className="break-words font-extrabold">{purchaseTitle(purchase)}{entry ? ' · Entrada' : ''}</h3><p className="mt-1 break-words text-sm text-text-muted">{ownershipLabel(purchase)} · {purchase.merchant || 'Tienda sin indicar'}</p></div>
+      <div className="min-w-0"><Heading className="break-words font-extrabold">{purchaseTitle(purchase)}{entry ? ' · Entrada' : ''}</Heading><p className="mt-1 break-words text-sm text-text-muted">{ownershipLabel(purchase)} · {purchase.merchant || 'Tienda sin indicar'}</p></div>
       <div className="sm:text-right"><p className="text-xl font-extrabold tabular-nums">{formatCents(amount, currency)}{recurring ? ' / mes' : ''}</p><p className="text-sm font-semibold text-brand-strong">Margen 0 %</p></div>
     </div>
     {recurring ? <div className="space-y-2 text-sm leading-6">
@@ -58,10 +60,15 @@ export function PurchaseLinkedExpenses({ query, householdId, kind, currency, tim
   if (query.isError) return <ErrorState title="No se han podido cargar los pagos de compras" description={query.error.message} onRetry={query.refetch} />;
   if (!purchases.length) return null;
   const visible = filterPurchases(purchases, { search });
+  const renderPurchase = (purchase) => <LinkedExpense currency={currency} householdId={householdId} key={`${householdId}:${purchase.id}`} kind={kind} purchase={purchase} timezone={timezone} />;
   return <section aria-labelledby={titleId} className="min-w-0 space-y-4">
     <h2 className="text-xl font-extrabold" id={titleId}>{kind === 'RECURRING' ? 'Financiaciones de compras' : 'Pagos únicos y entradas de compras'}</h2>
     <p className="text-sm leading-6 text-text-muted">Añadidos automáticamente desde Compras. Comparten sus registros de pago: no los añadas de nuevo como otro gasto. Los importes mostrados son los de la compra completa; el presupuesto respeta su reparto. Sin margen de seguridad.</p>
     <FormField label="Buscar compras vinculadas" onChange={(event) => setSearch(event.target.value)} type="search" value={search} />
-    {visible.length ? <ul className="space-y-3">{visible.map((purchase) => <LinkedExpense currency={currency} householdId={householdId} key={`${householdId}:${purchase.id}`} kind={kind} purchase={purchase} timezone={timezone} />)}</ul> : <p className="text-sm text-text-muted">No hay compras que coincidan con la búsqueda.</p>}
+    {kind === 'ONE_TIME' ? <p className="text-sm text-text-muted">Agrupados por año y mes del pago, más recientes primero.</p> : null}
+    {visible.length ? kind === 'ONE_TIME'
+      ? <MonthGroupedList items={visible} getDate={(purchase) => purchase.paymentMethod === 'FINANCED' ? purchase.financing?.downPaymentPaidAt : purchase.paymentDate} renderItem={renderPurchase} undatedLabel="Sin fecha de pago" />
+      : <ul className="space-y-3">{visible.map(renderPurchase)}</ul>
+      : <p className="text-sm text-text-muted">No hay compras que coincidan con la búsqueda.</p>}
   </section>;
 }

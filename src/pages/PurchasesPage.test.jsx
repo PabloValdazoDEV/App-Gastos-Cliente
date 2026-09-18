@@ -78,6 +78,24 @@ describe('PurchasesPage', () => {
     expect(screen.queryByText('123456789012345')).not.toBeInTheDocument();
   });
 
+  it('separa años y meses por fecha de compra y elimina grupos vacíos al buscar', async () => {
+    const user = userEvent.setup();
+    mocks.list.mockResolvedValue([
+      { ...television, purchaseDate: '2025-09-10' },
+      { ...phone, purchaseDate: '2026-01-01T00:00:00.000Z' },
+      { ...television, id: 'recent-tv', purchaseDate: '2026-09-10' },
+    ]);
+    renderPage();
+    const year = await screen.findByRole('region', { name: '2026' });
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['2026', '2025']);
+    expect(within(year).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Septiembre', 'Enero']);
+    expect(within(within(year).getByRole('region', { name: 'Enero' })).getByRole('link', { name: 'iPhone 17' })).toBeVisible();
+    expect(within(screen.getByRole('region', { name: '2025' })).getByRole('link', { name: 'Televisión' })).toBeVisible();
+    await user.type(screen.getByRole('searchbox'), 'iPhone');
+    expect(screen.queryByRole('region', { name: '2025' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Septiembre' })).not.toBeInTheDocument();
+  });
+
   it.each(['Apple Store', '999,00 €', 'Vigente hasta 17 sept 2029', 'Ver compra'])('abre la ficha pulsando en cualquier zona de la tarjeta: %s', async (text) => {
     const user = userEvent.setup();
     renderPage();
