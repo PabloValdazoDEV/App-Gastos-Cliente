@@ -38,6 +38,8 @@ import {
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
+import { PurchaseLinkedExpenses } from '../features/purchases/PurchaseLinkedExpenses';
+import { linkedPurchaseExpenses, useLinkedPurchaseExpenses } from '../features/purchases/linkedPurchaseExpenses';
 import { CategoryIconBadge } from '../features/households/categoryIcons';
 import {
   FormCard,
@@ -462,6 +464,7 @@ export function RecurringExpensesPage() {
   const household = useHousehold();
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
+  const purchases = useLinkedPurchaseExpenses(householdId);
   const [showForm, setShowForm] = useState(false);
   const [paymentSelection, setPaymentSelection] = useState(null);
   const paymentSelectionRef = useRef(null);
@@ -574,6 +577,7 @@ export function RecurringExpensesPage() {
       </div>
 
       <HouseholdGate household={household}>
+        <PurchaseLinkedExpenses query={purchases} householdId={householdId} currency={currency} kind="RECURRING" timezone={household.currentHousehold?.timezone} />
         {expenseToDelete ? (
           <ConfirmationDialog
             confirmLabel="Eliminar gasto"
@@ -631,7 +635,7 @@ export function RecurringExpensesPage() {
             title="No se han podido cargar los gastos"
           />
         ) : null}
-        {expenses.isSuccess && expenses.data.length === 0 ? (
+        {expenses.isSuccess && expenses.data.length === 0 && !linkedPurchaseExpenses(purchases.data, 'RECURRING').length ? (
           <EmptyState
             action={
               <button

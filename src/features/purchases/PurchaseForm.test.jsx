@@ -33,7 +33,7 @@ describe('PurchaseForm', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar compra' }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     expect(onSubmit.mock.calls[0][0]).toMatchObject({ totalCents: 99900, ownershipType: 'HOUSEHOLD', personalPersonId: null, shares: [], items: [{ name: 'iPhone 17', quantity: 1, priceCents: null, warrantyEndsAt: null, warrantyDurationMonths: null }] });
-    expect(screen.getByText(/Los pagos se incorporan al presupuesto de su mes/)).toHaveTextContent('los saldos de tus cuentas no se modifican automáticamente');
+    expect(screen.getByText(/El pago único aparecerá en Gastos puntuales/)).toHaveTextContent('los saldos de tus cuentas no se modifican automáticamente');
   });
 
   it('uses a personal owner selector and associates its required error', async () => {

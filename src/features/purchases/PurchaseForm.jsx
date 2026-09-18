@@ -18,7 +18,7 @@ import {
 const secondaryButton = 'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-4 py-2.5 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
 const percentage = (value) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(value / 100);
 
-export function PurchaseForm({ people = [], initialPurchase = null, onSubmit, onCancel, isPending = false, error = null, currency = 'EUR', timezone }) {
+export function PurchaseForm({ people = [], initialPurchase = null, initialValues, intakeHints = {}, singleProduct = false, onSubmit, onCancel, isPending = false, error = null, currency = 'EUR', timezone }) {
   const editing = Boolean(initialPurchase);
   const formRef = useRef(null);
   const pendingFocus = useRef(null);
@@ -27,7 +27,7 @@ export function PurchaseForm({ people = [], initialPurchase = null, onSubmit, on
   const [confirmPending, setConfirmPending] = useState(false);
   const id = useId();
   const { register, control, watch, handleSubmit, setFocus, setValue, getFieldState, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: purchaseDefaults(initialPurchase),
+    defaultValues: initialValues ?? purchaseDefaults(initialPurchase),
     resolver: zodResolver(purchaseFormSchema({ editing, initialPurchase, timezone })),
     mode: 'onChange',
     shouldFocusError: false,
@@ -85,6 +85,10 @@ export function PurchaseForm({ people = [], initialPurchase = null, onSubmit, on
   const submit = handleSubmit(async (values) => {
     if (pending || splitInvalid || submitLock.current || paymentConfirmation) return;
     const body = purchasePayload(values, { editing, initialPurchase });
+    if (singleProduct && !editing) {
+      body.singleProduct = true;
+      body.items = [{ ...body.items[0], priceCents: body.totalCents }];
+    }
     if (purchasePaymentNeedsReset(values, initialPurchase)) {
       setPaymentConfirmation(body);
       return;
@@ -114,9 +118,11 @@ export function PurchaseForm({ people = [], initialPurchase = null, onSubmit, on
       {paymentConfirmation ? <PurchaseConfirmation title="¿Modificar el pago registrado?" description="Esta modificación sustituirá o retirará el registro del pago al contado o de la entrada. Confirma solo si los nuevos datos reflejan lo que ocurrió. El cambio quedará en el historial de auditoría; no modifica tus saldos." confirmLabel="Confirmar cambio de pago" error={error} isPending={pending} onCancel={() => { setPaymentConfirmation(null); formRef.current?.querySelector('button[type="submit"]')?.focus(); }} onConfirm={confirmPaymentChange} /> : null}
       <fieldset className="min-w-0 space-y-5" disabled={pending}>
         <legend className="mb-4 text-lg font-extrabold text-text">Compra</legend>
+        {singleProduct && !editing ? <FormField disabled={pending} error={errors.items?.[0]?.name?.message} label="Nombre del producto" maxLength={200} {...register('items.0.name')} /> : null}
+        {singleProduct && !editing ? <FormField disabled={pending} error={errors.items?.[0]?.quantity?.message} help={intakeHints.quantity ?? 'Número de unidades del producto, no el importe.'} inputMode="numeric" label="Cantidad" {...register('items.0.quantity')} /> : null}
         <div className="date-fields-grid grid min-w-0 gap-5">
-          <FormField disabled={pending} error={errors.purchaseDate?.message} label="Fecha de compra" type="date" {...register('purchaseDate')} />
-          <FormField disabled={pending} error={errors.total?.message} help="Precio de los productos, sin añadir los intereses de financiación." inputMode="decimal" label={`Total de la compra (${currency === 'EUR' ? '€' : currency})`} readOnly={paidHistory} {...register('total')} />
+          <FormField disabled={pending} error={errors.purchaseDate?.message} help={intakeHints.date} label="Fecha de compra" type="date" {...register('purchaseDate')} />
+          <FormField disabled={pending} error={errors.total?.message} help={singleProduct ? 'Precio final de este producto, sin intereses de financiación.' : 'Precio de los productos, sin añadir los intereses de financiación.'} inputMode="decimal" label={`Total de la compra (${currency === 'EUR' ? '€' : currency})`} readOnly={paidHistory} {...register('total')} />
         </div>
         {editing ? <p className="text-xs leading-5 text-text-muted">Si cambias la fecha de compra, se recalculan las garantías por duración. Las fechas fin introducidas manualmente se conservan.</p> : null}
         <FormField disabled={pending} error={errors.merchant?.message} label="Tienda (opcional)" maxLength={200} {...register('merchant')} />
@@ -179,23 +185,23 @@ export function PurchaseForm({ people = [], initialPurchase = null, onSubmit, on
 
       {!editing ? (
         <section aria-labelledby={`${id}-products`} className="min-w-0 space-y-4">
-          <h3 className="text-lg font-extrabold text-text" id={`${id}-products`}>Productos</h3>
+          <h3 className="text-lg font-extrabold text-text" id={`${id}-products`}>{singleProduct ? 'Garantía y detalles del producto' : 'Productos'}</h3>
           {items.fields.map((item, index) => (
             <fieldset className="min-w-0 rounded-2xl border border-border p-3 sm:p-5" disabled={pending} key={item.id}>
-              <legend className="px-1 text-sm font-extrabold text-text">Producto {index + 1}</legend>
-              <PurchaseItemFields currency={currency} disabled={pending} errors={errors.items?.[index]} prefix={`items.${index}`} purchaseDate={purchaseDate} register={register} watch={watch} />
-              <div className="mt-4">
+              {!singleProduct ? <legend className="px-1 text-sm font-extrabold text-text">Producto {index + 1}</legend> : null}
+              <PurchaseItemFields warrantyHelp={singleProduct ? intakeHints.warranty : undefined} setValue={setValue} singleProduct={singleProduct} currency={currency} disabled={pending} errors={errors.items?.[index]} prefix={`items.${index}`} purchaseDate={purchaseDate} register={register} watch={watch} />
+              {!singleProduct ? <div className="mt-4">
                 <button aria-label={`Quitar producto ${index + 1}`} className={secondaryButton} disabled={pending || items.fields.length === 1} onClick={() => removeProduct(index)} type="button"><Trash2 aria-hidden="true" className="size-4 shrink-0" />Quitar producto</button>
                 {items.fields.length === 1 ? <p className="mt-2 text-xs text-text-muted">La compra debe conservar al menos un producto.</p> : null}
-              </div>
+              </div> : null}
             </fieldset>
           ))}
-          <button className={`${secondaryButton} w-full`} disabled={pending || items.fields.length >= MAX_PURCHASE_ITEMS} onClick={() => items.append(purchaseItemDefaults(), { focusName: `items.${items.fields.length}.name` })} type="button"><Plus aria-hidden="true" className="size-4 shrink-0" />Añadir otro producto</button>
+          {!singleProduct ? <button className={`${secondaryButton} w-full`} disabled={pending || items.fields.length >= MAX_PURCHASE_ITEMS} onClick={() => items.append(purchaseItemDefaults(), { focusName: `items.${items.fields.length}.name` })} type="button"><Plus aria-hidden="true" className="size-4 shrink-0" />Añadir otro producto</button> : null}
           {items.fields.length >= MAX_PURCHASE_ITEMS ? <p className="text-xs text-text-muted">Has alcanzado el máximo de 50 productos por compra.</p> : null}
         </section>
       ) : null}
 
-      <p className="text-sm leading-6 text-text-muted">Los pagos se incorporan al presupuesto de su mes. Solo los pagos confirmados suman gasto utilizado; los saldos de tus cuentas no se modifican automáticamente.</p>
+      <p className="text-sm leading-6 text-text-muted">El pago único aparecerá en Gastos puntuales; la financiación, en Gastos recurrentes hasta la última cuota, y su entrada en Puntuales. Siempre con margen 0 %, sin duplicar importes. Solo los pagos confirmados suman gasto utilizado; los saldos de tus cuentas no se modifican automáticamente.</p>
       <div className="space-y-3">
         <AuthError error={paymentConfirmation ? null : error} />
         <SubmitButton disabled={splitInvalid} isPending={pending} pendingLabel="Guardando compra…">{editing ? 'Guardar cambios de la compra' : 'Guardar compra'}</SubmitButton>

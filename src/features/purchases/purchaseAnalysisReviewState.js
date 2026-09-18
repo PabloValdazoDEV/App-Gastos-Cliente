@@ -33,11 +33,11 @@ export function analysisReviewDefaults(analysis, purchase, currency = 'EUR') {
   return {
     merchant: data.merchant?.name ?? purchase.merchant ?? '',
     purchaseDate: data.purchaseDate?.value ?? isoDate(purchase.purchaseDate),
-    total: inputCents(data.totalCents ?? purchase.totalCents),
+    total: inputCents(purchase.singleProduct ? purchase.totalCents : data.totalCents ?? purchase.totalCents),
     currency: data.currency ?? currency,
     items: (data.items ?? []).map(analysisItemDefaults),
     applyMerchant: true, applyPurchaseDate: true,
-    applyTotal: !analysisTotalProtected(purchase), applyItems: false,
+    applyTotal: !purchase.singleProduct && !analysisTotalProtected(purchase), applyItems: false,
     acknowledgeTotalMismatch: false,
   };
 }
@@ -65,6 +65,7 @@ export function analysisReviewSchema(purchase, currency = 'EUR') {
     if (values.applyPurchaseDate && !values.purchaseDate) issue(['purchaseDate'], 'Indica la fecha o desmarca aplicar la fecha.');
     if (values.applyTotal && analysisMoney(values.total) === null) issue(['total'], 'Indica el total o desmarca aplicar el total.');
     if (values.applyTotal && analysisTotalProtected(purchase)) issue(['applyTotal'], 'El total está protegido porque hay cuotas pagadas.');
+    if (values.applyItems && purchase.singleProduct) issue(['applyItems'], 'Crea otra compra para guardar un producto distinto.');
     if ((values.applyTotal || values.applyItems) && values.currency !== currency) issue(['currency'], `La moneda debe ser ${currency}. No se realiza conversión automática.`);
     if (values.applyItems && values.items.length + (purchase.items?.length ?? 0) > MAX_PURCHASE_ITEMS) issue(['applyItems'], `Esta compra puede tener como máximo ${MAX_PURCHASE_ITEMS} productos. Reduce los productos que vas a añadir.`);
     values.items.forEach((item, index) => {

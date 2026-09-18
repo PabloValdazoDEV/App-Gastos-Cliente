@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), listPeople: vi.fn(), household: { currentHousehold: { id: 'home', currency: 'EUR' }, isPending: false, isError: false } }));
 vi.mock('../features/purchases/purchasesService', () => ({ purchasesService: { list: mocks.list, create: mocks.create } }));
+vi.mock('../features/purchases/purchaseDraftsService', () => ({ purchaseDraftsService: { list: vi.fn(async () => []) } }));
 vi.mock('../features/households/householdService', () => ({ householdService: { listPeople: mocks.listPeople } }));
 vi.mock('../features/households/useHousehold', () => ({ useHousehold: () => mocks.household }));
 
@@ -77,6 +78,32 @@ describe('PurchasesPage', () => {
     expect(screen.queryByText('123456789012345')).not.toBeInTheDocument();
   });
 
+  it.each(['Apple Store', '999,00 €', 'Vigente hasta 17 sept 2029', 'Ver compra'])('abre la ficha pulsando en cualquier zona de la tarjeta: %s', async (text) => {
+    const user = userEvent.setup();
+    renderPage();
+    const card = await screen.findByRole('link', { name: 'iPhone 17' });
+    expect(card).toHaveAttribute('href', '/compras/phone');
+    expect(card).toHaveAccessibleDescription('Ver compra');
+    const target = within(card).getByText(text);
+    expect(target.closest('a')).toBe(card);
+    await user.click(target);
+    expect(await screen.findByText('Ficha phone')).toBeVisible();
+  });
+
+  it('ofrece una sola parada de teclado por tarjeta y abre con Enter', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const card = await screen.findByRole('link', { name: 'iPhone 17' });
+    expect(card.querySelector('a, button, input, [tabindex]')).toBeNull();
+    expect(card).toHaveClass('h-full', 'p-5', 'focus-visible:outline-2');
+    card.focus();
+    await user.tab();
+    const next = screen.getByRole('link', { name: 'Televisión' });
+    expect(next).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('Ficha tv')).toBeVisible();
+  });
+
   it.each(['iPhone', 'Apple', '17 Pro', 'Apple Store'])('busca por producto, marca, modelo o comercio: %s', async (term) => {
     const user = userEvent.setup();
     renderPage();
@@ -141,8 +168,10 @@ describe('PurchasesPage', () => {
     const button = await screen.findByRole('button', { name: 'Añadir compra' });
     button.focus();
     await user.keyboard('{Enter}');
+    expect(await screen.findByLabelText('Subir ticket o factura')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Introducir sin archivo' }));
     const form = await screen.findByRole('form', { name: 'Añadir compra' });
-    expect(within(form).getByLabelText('Fecha de compra')).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Revisa y guarda tu compra' })).toHaveFocus();
     await user.click(within(form).getByRole('button', { name: 'Cancelar' }));
     expect(screen.getByRole('button', { name: 'Añadir compra' })).toHaveFocus();
   });
@@ -151,6 +180,7 @@ describe('PurchasesPage', () => {
     const user = userEvent.setup();
     const { invalidate } = renderPage();
     await user.click(await screen.findByRole('button', { name: 'Añadir compra' }));
+    await user.click(await screen.findByRole('button', { name: 'Introducir sin archivo' }));
     const form = await screen.findByRole('form', { name: 'Añadir compra' });
     await user.type(within(form).getByLabelText('Total de la compra (€)'), '999');
     await user.type(within(form).getByLabelText('Nombre del producto'), 'iPhone 17');
@@ -167,6 +197,7 @@ describe('PurchasesPage', () => {
     mocks.create.mockResolvedValue({ id: 'private', accessRevoked: true });
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Añadir compra' }));
+    await user.click(await screen.findByRole('button', { name: 'Introducir sin archivo' }));
     const form = await screen.findByRole('form', { name: 'Añadir compra' });
     await user.type(within(form).getByLabelText('Total de la compra (€)'), '10');
     await user.type(within(form).getByLabelText('Nombre del producto'), 'Regalo');
@@ -181,6 +212,7 @@ describe('PurchasesPage', () => {
     mocks.create.mockRejectedValue(new Error('No se pudo guardar. Inténtalo de nuevo.'));
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Añadir compra' }));
+    await user.click(await screen.findByRole('button', { name: 'Introducir sin archivo' }));
     const form = await screen.findByRole('form', { name: 'Añadir compra' });
     await user.type(within(form).getByLabelText('Total de la compra (€)'), '10');
     await user.type(within(form).getByLabelText('Nombre del producto'), 'Regalo');
@@ -203,6 +235,7 @@ describe('PurchasesPage', () => {
     const user = userEvent.setup();
     const { refresh } = renderPage();
     await user.click(await screen.findByRole('button', { name: 'Añadir compra' }));
+    await user.click(await screen.findByRole('button', { name: 'Introducir sin archivo' }));
     await screen.findByRole('form', { name: 'Añadir compra' });
     mocks.household = { ...mocks.household, currentHousehold: { id: 'other', currency: 'EUR' } };
     mocks.list.mockResolvedValue([]);

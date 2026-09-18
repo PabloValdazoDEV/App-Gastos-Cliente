@@ -49,6 +49,8 @@ vi.mock('../features/households/useHousehold', () => ({
 
 import { RecurringExpensesPage } from './RecurringExpensesPage';
 
+vi.mock('../features/purchases/purchasesService', () => ({ purchasesService: { list: vi.fn(async () => []) } }));
+
 function renderPage(initialEntry = '/gastos/recurrentes') {
   const client = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },

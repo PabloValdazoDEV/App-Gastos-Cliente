@@ -12,6 +12,8 @@ vi.mock('../features/households/useHousehold', () => ({
 
 import { OneTimeExpensesPage } from './OneTimeExpensesPage';
 
+vi.mock('../features/purchases/purchasesService', () => ({ purchasesService: { list: vi.fn(async () => []) } }));
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidate = vi.spyOn(client, 'invalidateQueries');

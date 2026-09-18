@@ -19,6 +19,8 @@ import { eurosInputToCents, formatCents, isoDate } from '../features/finance/mon
 import { householdService } from '../features/households/householdService';
 import { CategoryIconBadge } from '../features/households/categoryIcons';
 import { useHousehold } from '../features/households/useHousehold';
+import { PurchaseLinkedExpenses } from '../features/purchases/PurchaseLinkedExpenses';
+import { linkedPurchaseExpenses, useLinkedPurchaseExpenses } from '../features/purchases/linkedPurchaseExpenses';
 import {
   ConfirmationDialog,
   ExpenseFilters,
@@ -198,6 +200,7 @@ export function OneTimeExpensesPage() {
   const queryClient = useQueryClient();
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
+  const purchases = useLinkedPurchaseExpenses(householdId);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -265,6 +268,7 @@ export function OneTimeExpensesPage() {
         ) : null}
       </div>
       <HouseholdGate household={household}>
+        <PurchaseLinkedExpenses query={purchases} householdId={householdId} currency={currency} kind="ONE_TIME" timezone={household.currentHousehold?.timezone} />
         {deletingExpense ? (
           <ConfirmationDialog
             confirmLabel="Eliminar gasto"
@@ -325,7 +329,7 @@ export function OneTimeExpensesPage() {
             )}
           </section>
         ) : null}
-        {expenses.isSuccess && expenses.data.length === 0 ? <EmptyState action={<button className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-on-brand hover:bg-brand-hover" onClick={() => setShowForm(true)} type="button">Añadir el primer gasto</button>} description="Registra compras o pagos excepcionales que no se repiten cada mes." icon={Receipt} title="No hay gastos puntuales" /> : null}
+        {expenses.isSuccess && expenses.data.length === 0 && !linkedPurchaseExpenses(purchases.data, 'ONE_TIME').length ? <EmptyState action={<button className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-on-brand hover:bg-brand-hover" onClick={() => setShowForm(true)} type="button">Añadir el primer gasto</button>} description="Registra compras o pagos excepcionales que no se repiten cada mes." icon={Receipt} title="No hay gastos puntuales" /> : null}
       </HouseholdGate>
     </div>
   );

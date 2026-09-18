@@ -3,8 +3,9 @@ import { useId } from 'react';
 import { SelectField, TextareaField } from '../../pages/expensePageShared';
 import { FormField } from '../auth/components/FormField';
 import { addWarrantyMonths, formatWarrantyPreview } from './purchaseFormState';
+import { PurchaseWarrantySuggestion } from './PurchaseWarrantySuggestion';
 
-export function PurchaseItemFields({ register, watch, errors = {}, prefix = '', purchaseDate, disabled, currency = 'EUR' }) {
+export function PurchaseItemFields({ register, watch, setValue, errors = {}, prefix = '', purchaseDate, disabled, currency = 'EUR', singleProduct = false, warrantyHelp }) {
   const id = useId();
   const field = (name) => prefix ? `${prefix}.${name}` : name;
   const warrantyEnabled = watch(field('warrantyEnabled'));
@@ -16,14 +17,16 @@ export function PurchaseItemFields({ register, watch, errors = {}, prefix = '', 
 
   return (
     <div className="min-w-0 space-y-5">
-      <FormField disabled={disabled} error={errors.name?.message} label="Nombre del producto" maxLength={200} {...register(field('name'))} />
+      {!singleProduct || !prefix ? <FormField disabled={disabled} error={errors.name?.message} label="Nombre del producto" maxLength={200} {...register(field('name'))} /> : null}
+      {singleProduct && !prefix ? <FormField disabled={disabled} error={errors.quantity?.message} help="Número de unidades del producto, no el importe." inputMode="numeric" label="Cantidad" {...register(field('quantity'))} /> : null}
       <div className="grid min-w-0 gap-5 sm:grid-cols-2">
         <FormField disabled={disabled} error={errors.brand?.message} label="Marca (opcional)" maxLength={120} {...register(field('brand'))} />
         <FormField disabled={disabled} error={errors.model?.message} label="Modelo (opcional)" maxLength={120} {...register(field('model'))} />
       </div>
-      <FormField disabled={disabled} error={errors.price?.message} help="No tiene que coincidir con el total de la compra." inputMode="decimal" label={`Precio del producto (${currency === 'EUR' ? '€' : currency}, opcional)`} {...register(field('price'))} />
+      {!singleProduct ? <FormField disabled={disabled} error={errors.price?.message} help="No tiene que coincidir con el total de la compra." inputMode="decimal" label={`Precio del producto (${currency === 'EUR' ? '€' : currency}, opcional)`} {...register(field('price'))} /> : null}
       <fieldset className="min-w-0 space-y-3" disabled={disabled}>
         <legend className="text-sm font-bold text-text">Garantía</legend>
+        {warrantyHelp ? <p className="text-sm leading-6 text-text-muted">{warrantyHelp}</p> : null}
         <label className="flex min-h-11 items-center gap-3 rounded-xl border border-border-strong px-3 py-2.5 text-sm font-semibold has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
           <input className="size-4 shrink-0 accent-brand" type="checkbox" {...register(field('warrantyEnabled'))} />
           Tiene garantía
@@ -53,14 +56,19 @@ export function PurchaseItemFields({ register, watch, errors = {}, prefix = '', 
             <p aria-live="polite" className="break-words text-sm font-semibold text-brand-deep" id={`${id}-preview`}>
               {preview && /^\d{4}-\d{2}-\d{2}$/.test(preview) ? `Hasta el ${formatWarrantyPreview(preview)}` : 'Indica los datos para calcular la fecha fin.'}
             </p>
-            <p className="text-xs leading-5 text-text-muted">Registra la garantía que conoces; no se asigna ninguna duración automáticamente.</p>
+            <p className="text-xs leading-5 text-text-muted">La duración se calcula desde la fecha de compra. Si empieza en otra fecha, indica la fecha fin. Puedes corregir la garantía detectada o la sugerencia antes de guardar.</p>
           </div>
         )}
+        {setValue ? <PurchaseWarrantySuggestion disabled={disabled} purchaseDate={purchaseDate} warrantyEnabled={warrantyEnabled} onApply={() => {
+          for (const [name, value] of Object.entries({ warrantyEnabled: true, warrantyMethod: 'DURATION', warrantyDuration: '3', warrantyUnit: 'YEARS', warrantyEndsAt: '' })) {
+            setValue(field(name), value, { shouldDirty: true, shouldValidate: true });
+          }
+        }} /> : null}
       </fieldset>
       <details className="min-w-0 rounded-xl border border-border p-3">
-        <summary className="min-h-11 cursor-pointer content-center rounded-lg text-sm font-bold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">Más datos: cantidad, serie, IMEI y notas</summary>
+        <summary className="min-h-11 cursor-pointer content-center rounded-lg text-sm font-bold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">{singleProduct ? 'Más datos: serie, IMEI y notas' : 'Más datos: cantidad, serie, IMEI y notas'}</summary>
         <div className="mt-4 min-w-0 space-y-5">
-          <FormField disabled={disabled} error={errors.quantity?.message} inputMode="numeric" label="Cantidad" {...register(field('quantity'))} />
+          {!singleProduct ? <FormField disabled={disabled} error={errors.quantity?.message} inputMode="numeric" label="Cantidad" {...register(field('quantity'))} /> : null}
           <FormField disabled={disabled} error={errors.serialNumber?.message} label="Número de serie (opcional)" maxLength={100} {...register(field('serialNumber'))} />
           <FormField disabled={disabled} error={errors.imei?.message} inputMode="text" label="IMEI (opcional)" maxLength={100} {...register(field('imei'))} />
           <TextareaField disabled={disabled} error={errors.notes?.message} label="Notas del producto (opcional)" maxLength={2000} {...register(field('notes'))} />
