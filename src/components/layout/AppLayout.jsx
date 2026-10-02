@@ -10,6 +10,7 @@ import { publicEnv } from '../../config/env';
 import { useHousehold } from '../../features/households/useHousehold';
 import { useLogoutMutation } from '../../features/auth/authQueries';
 import { notificationService } from '../../features/notifications/notificationService';
+import { DevelopmentDateControl } from '../../features/development/DevelopmentDateControl';
 
 function getNavigationClassName(isActive, mobile) {
   if (mobile) {
@@ -241,6 +242,7 @@ export function AppLayout() {
             ref={mainRef}
             tabIndex="-1"
           >
+            <DevelopmentDateControl />
             <Outlet />
           </main>
         </div>

@@ -116,7 +116,7 @@ describe('BudgetPage', () => {
     }
     await user.selectOptions(select, 'ALL');
     Object.values(types).forEach((name) => expect(screen.getByRole('heading', { name })).toBeInTheDocument());
-    expect(screen.getByText('Total recomendado').parentElement).toHaveTextContent('1000,00');
+    expect(screen.getByText('Total conjunto y tus gastos personales').parentElement).toHaveTextContent('1000,00');
     expect(mocks.budget).toHaveBeenCalledTimes(1);
   });
 
@@ -153,7 +153,7 @@ describe('BudgetPage', () => {
     expect(screen.getByRole('heading', { name: 'Móvil · Al contado' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Televisor · Cuota 3/20' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Alquiler' })).not.toBeInTheDocument();
-    expect(screen.getByText('Total recomendado').parentElement).toHaveTextContent('950,00');
+    expect(screen.getByText('Total conjunto y tus gastos personales').parentElement).toHaveTextContent('950,00');
     expect(screen.getByRole('link', { name: 'Ver compra: Móvil · Al contado' })).toHaveAttribute('href', '/compras/phone');
     expect(screen.getByText(/Compra al contado · obligación del mes/)).toBeInTheDocument();
     expect(screen.getByText(/Cuota de compra · obligación del mes/)).toBeInTheDocument();

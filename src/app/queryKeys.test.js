@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { queryKeys } from '../api/queryKeys';
 
 describe('queryKeys', () => {
+  it('separates calendar months while keeping the household invalidation prefix', () => {
+    expect(queryKeys.calendar('home', 'MONTH', '2026-09-01')).toEqual(['calendar', 'home', 'MONTH', '2026-09-01']);
+    expect(queryKeys.calendar('home', 'MONTH', '2026-09-01')).not.toEqual(queryKeys.calendar('home', 'MONTH', '2026-10-01'));
+    expect(queryKeys.calendar('home', '90_DAYS')).toEqual(['calendar', 'home', '90_DAYS']);
+  });
   it('mantiene hogares distintos en cachés separadas', () => {
     expect(queryKeys.dashboard('hogar-a', '2026-08')).not.toEqual(
       queryKeys.dashboard('hogar-b', '2026-08'),

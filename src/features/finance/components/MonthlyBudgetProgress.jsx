@@ -77,7 +77,7 @@ export function CashCoverage({ coverage, currency, title }) {
             {[
               ['Saldo actual', coverage.balanceCents],
               ['Presupuesto restante', coverage.remainingBudgetCents],
-              [isShortfall ? 'Pendiente por cubrir' : 'Colchón', isShortfall ? coverage.shortfallCents : coverage.cushionCents],
+              [isShortfall ? 'Pendiente por cubrir' : 'Saldo sobre la previsión', isShortfall ? coverage.shortfallCents : coverage.cushionCents],
             ].map(([label, cents]) => (
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 sm:block" key={label}>
                 <dt className="text-xs font-semibold text-text-muted">{label}</dt>
@@ -86,8 +86,7 @@ export function CashCoverage({ coverage, currency, title }) {
             ))}
           </dl>
           <p className={`mt-5 break-words font-bold ${isShortfall ? 'text-amber-900' : 'text-brand-strong'}`}>{isShortfall ? `Faltan ${formatCents(coverage.shortfallCents, currency)} para cubrir el presupuesto restante` : 'El saldo cubre el presupuesto restante'}</p>
-          {!isShortfall ? <p className="mt-1 text-sm text-text-muted">Colchón sobre lo presupuestado: {formatCents(coverage.cushionCents, currency)}.</p> : null}
-          <p className="mt-3 text-xs leading-5 text-text-muted">Es la diferencia entre el saldo registrado y el presupuesto que todavía queda del mes. No incluye gastos que aún no hayas registrado.</p>
+          <p className="mt-3 text-xs leading-5 text-text-muted">Compara el saldo registrado con el presupuesto restante del mes. No descuenta las reservas para futuros pagos ni los gastos sin registrar: el saldo sobrante no es necesariamente dinero libre.</p>
           {coverage.balanceSource === 'MONTHLY_PLANNING' ? <p className="mt-2 text-xs leading-5 text-text-muted">Se utiliza el saldo confirmado al preparar el mes; revísalo si ha cambiado.</p> : null}
         </>
       )}

@@ -14,6 +14,13 @@ vi.mock('../../api/client', () => ({
 
 import { financeService } from './financeService';
 
+it('requests the selected calendar month without changing legacy rolling views', async () => {
+  await financeService.calendar('home', 'MONTH', '2026-10-01');
+  expect(clientMocks.get).toHaveBeenLastCalledWith('/households/home/calendar', { params: { view: 'MONTH', anchorDate: '2026-10-01' } });
+  await financeService.calendar('home', '90_DAYS');
+  expect(clientMocks.get).toHaveBeenLastCalledWith('/households/home/calendar', { params: { view: '90_DAYS' } });
+});
+
 describe('financeService · documentos de factura', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -112,5 +119,27 @@ describe('financeService · facturas', () => {
       '/households/household-1/invoices/invoice-1',
       body,
     );
+  });
+});
+
+describe('financeService · previsión mensual', () => {
+  it('envía motivo y versión al corregir, y separa la vista previa de guardar una revisión', async () => {
+    vi.clearAllMocks();
+    await financeService.fundPlanning({ householdId: 'home', planningId: 'plan', scope: 'PERSONAL', action: 'REVOKE', expectedVersion: 2, reason: 'Error' });
+    expect(clientMocks.patch).toHaveBeenCalledWith('/households/home/plannings/plan/fund', { scope: 'PERSONAL', action: 'REVOKE', expectedVersion: 2, reason: 'Error' });
+    await financeService.planningRevisionPreview({ householdId: 'home', planningId: 'plan' });
+    expect(clientMocks.get).toHaveBeenCalledWith('/households/home/plannings/plan/revision-preview');
+    const body = { expectedVersion: 3, previewFingerprint: 'hash', reason: 'Corrección' };
+    await financeService.revisePlanning({ householdId: 'home', planningId: 'plan', body });
+    expect(clientMocks.post).toHaveBeenCalledWith('/households/home/plannings/plan/revisions', body);
+  });
+  it('consulta el mes elegido y envía el ámbito de confirmación sin cambiar el dashboard actual', async () => {
+    vi.clearAllMocks();
+    await financeService.dashboard('home', '2026-11-01');
+    expect(clientMocks.get).toHaveBeenCalledWith('/households/home/dashboard', { params: { date: '2026-11-01' } });
+    await financeService.dashboard('home');
+    expect(clientMocks.get).toHaveBeenLastCalledWith('/households/home/dashboard');
+    await financeService.fundPlanning({ householdId: 'home', planningId: 'plan', scope: 'PERSONAL' });
+    expect(clientMocks.patch).toHaveBeenCalledWith('/households/home/plannings/plan/fund', { scope: 'PERSONAL' });
   });
 });

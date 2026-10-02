@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { eurosInputToCents } from '../features/finance/money';
+import { getDevelopmentDate } from '../features/development/developmentDate';
 
 export const controlClassName = [
   'min-h-12 w-full rounded-xl border border-border-strong bg-surface px-3.5 py-2.5 text-base text-text shadow-sm outline-none transition-colors',
@@ -39,6 +40,8 @@ export function peopleFrom(data) {
 }
 
 export function todayIso() {
+  const simulated = getDevelopmentDate();
+  if (simulated) return simulated;
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);

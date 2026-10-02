@@ -118,7 +118,7 @@ describe('SimulatorPage', () => {
 
   it('activa el ajuste elegido directamente, incluida la opción de este mes', async () => {
     const user = userEvent.setup();
-    mocks.simulation.mockResolvedValueOnce({
+    mocks.simulation.mockResolvedValue({
       deficitCents: 15_000,
       financialStatus: 'DEFICIT',
       monthlyStandardBudgetCents: 100_000,

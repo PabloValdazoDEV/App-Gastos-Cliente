@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 
 import { queryKeys } from '../api/queryKeys';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -25,6 +26,7 @@ import {
 import { PageHeader } from '../components/ui/PageHeader';
 import { AuthError } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
 import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
 import { ConfirmationDialog } from './expensePageShared';
@@ -233,12 +235,9 @@ function HouseholdSummary({ household }) {
 function HouseholdSettings({ household, canManage }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(household.name);
-  const [margin, setMargin] = useState(bpsToPercent(household.safetyMarginBps));
-  const [withoutMargin, setWithoutMargin] = useState(household.safetyMarginBps === 0);
   const [contributionDay, setContributionDay] = useState(
     String(household.contributionDay ?? 1),
   );
-  const [validationError, setValidationError] = useState('');
   const [contributionDayError, setContributionDayError] = useState('');
   const mutation = useMutation({
     mutationFn: householdService.update,
@@ -252,22 +251,19 @@ function HouseholdSettings({ household, canManage }) {
         }),
       );
       queryClient.invalidateQueries({ queryKey: queryKeys.households.all() });
+      invalidateBudgetQueries(queryClient, household.id);
       toast.success('Configuración del hogar guardada.');
     },
   });
 
   useEffect(() => {
     setName(household.name);
-    setMargin(bpsToPercent(household.safetyMarginBps));
-    setWithoutMargin(household.safetyMarginBps === 0);
     setContributionDay(String(household.contributionDay ?? 1));
-    setValidationError('');
     setContributionDayError('');
   }, [
     household.contributionDay,
     household.id,
     household.name,
-    household.safetyMarginBps,
   ]);
 
   if (!canManage) return null;
@@ -275,7 +271,6 @@ function HouseholdSettings({ household, canManage }) {
   function handleSubmit(event) {
     event.preventDefault();
     try {
-      const safetyMarginBps = withoutMargin ? 0 : percentToBps(margin);
       const parsedContributionDay = Number(contributionDay);
 
       if (
@@ -287,29 +282,23 @@ function HouseholdSettings({ household, canManage }) {
         throw new RangeError('El día habitual debe estar entre 1 y 31.');
       }
 
-      setValidationError('');
       setContributionDayError('');
       mutation.mutate({
         householdId: household.id,
         body: {
           contributionDay: parsedContributionDay,
           name: name.trim(),
-          safetyMarginBps,
         },
       });
     } catch (error) {
-      if (error instanceof RangeError) {
-        setContributionDayError(error.message);
-      } else {
-        setValidationError(error.message);
-      }
+      setContributionDayError(error.message);
     }
   }
 
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-card sm:p-6">
       <SectionHeading
-        description="El margen se mostrará por separado en los cálculos; no queda escondido dentro del presupuesto."
+        description="Nombre del hogar y día habitual para registrar las aportaciones."
         icon={Settings2}
         title="Configuración básica"
       />
@@ -322,29 +311,6 @@ function HouseholdSettings({ household, canManage }) {
           required
           value={name}
         />
-        <FormField
-          error={validationError}
-          help="10 equivale a un margen del 10 %."
-          inputMode="decimal"
-          label="Margen general (%)"
-          name="settingsMargin"
-          onChange={(event) => setMargin(event.target.value)}
-          placeholder="10"
-          required={!withoutMargin}
-          value={margin}
-        />
-        <label className="flex min-h-12 items-start gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm text-text sm:col-span-2">
-          <input
-            checked={withoutMargin}
-            className="mt-0.5 size-4 accent-brand"
-            onChange={(event) => setWithoutMargin(event.target.checked)}
-            type="checkbox"
-          />
-          <span>
-            <span className="block font-bold">Sin margen de seguridad</span>
-            <span className="mt-0.5 block text-xs leading-5 text-text-muted">El presupuesto usará exactamente el importe previsto.</span>
-          </span>
-        </label>
         <FormField
           error={contributionDayError}
           help="Antes de este día, un mes sin preparar se mostrará como pendiente, no como déficit."
@@ -371,6 +337,7 @@ function HouseholdSettings({ household, canManage }) {
           <AuthError error={mutation.error} />
         </div>
       </form>
+      <p className="mt-5 text-sm text-text-muted">Margen general: {household.safetyMarginBps / 100} %. <Link className="inline-flex min-h-11 items-center font-bold text-brand-strong underline" to="/mas/ajustes">Cambiar margen en Preferencias</Link>.</p>
     </section>
   );
 }

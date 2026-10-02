@@ -40,7 +40,7 @@ describe('Calendar purchase payments', () => {
     mocks.pay.mockResolvedValue(paidPurchase());
     mocks.correct.mockResolvedValue(paidPurchase());
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
   it('distinguishes installment from recurring source and never offers omission for a purchase', async () => {
     mocks.calendar.mockResolvedValue(calendar([event, { sourceType: 'RECURRING_EXPENSE', expenseId: 'gym', dueDate: '2026-10-15', name: 'Gimnasio', status: 'UPCOMING', expectedAmountCents: 4000, canRegisterPayment: true, scope: 'HOUSEHOLD' }]));
@@ -301,7 +301,7 @@ describe('Calendar purchase payments', () => {
     mocks.household.currentHousehold = { id: 'other', currency: 'EUR', timezone: 'Europe/Madrid' };
     mocks.calendar.mockResolvedValue(calendar([]));
     refresh();
-    await screen.findByRole('heading', { name: 'No hay pagos programados' });
+    await screen.findByRole('heading', { name: 'No hay gastos en este periodo' });
     client.removeQueries({ queryKey: ['purchases', 'home', 'detail', 'purchase'], exact: true });
     await act(async () => resolve(paidPurchase()));
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
@@ -309,14 +309,15 @@ describe('Calendar purchase payments', () => {
     expect(mocks.success).not.toHaveBeenCalled();
   });
 
-  it('changing calendar range closes a purchase form and cancels its pending detail read', async () => {
+  it('changing calendar month closes a purchase form and cancels its pending detail read', async () => {
     const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     let signal;
     mocks.detail.mockImplementation((args) => { signal = args.signal; return new Promise(() => {}); });
     setup();
     await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
     expect(signal.aborted).toBe(false);
-    await user.click(screen.getByRole('button', { name: '90 días' }));
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
     expect(signal.aborted).toBe(true);
     expect(screen.queryByText('Cargando datos del pago de compra')).not.toBeInTheDocument();
   });

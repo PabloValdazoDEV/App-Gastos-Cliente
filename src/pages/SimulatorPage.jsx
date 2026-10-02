@@ -11,8 +11,11 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { financeService } from '../features/finance/financeService';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
+import { useHouseholdDraftGuard } from '../features/households/useHouseholdDraftGuard';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
+import { todayIso } from './expensePageUtils';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 
 const financialStatus = Object.freeze({
   ATTENTION: {
@@ -42,8 +45,18 @@ function remainingDaysLabel(daysRemaining, overdue = false) {
 }
 
 export function SimulatorPage() {
-  const { currentHousehold, isPending: householdPending } = useHousehold();
-  const householdId = currentHousehold?.id;
+  const { currentHousehold, isPending, isError, error, refetch } = useHousehold();
+  if (isPending) return <LoadingState />;
+  if (isError) return <ErrorState description={error?.message} onRetry={refetch} />;
+  if (!currentHousehold) {
+    return <EmptyState action={<Link className="font-bold text-brand-strong" to="/hogar">Crear hogar</Link>} description="El simulador necesita los gastos y el saldo de un hogar." icon={Gauge} title="No hay hogar seleccionado" />;
+  }
+  return <HouseholdSimulator currentHousehold={currentHousehold} key={currentHousehold.id} />;
+}
+
+function HouseholdSimulator({ currentHousehold }) {
+  const householdId = currentHousehold.id;
+  const [initialDate] = useState(today);
   const [date, setDate] = useState(today);
   const [appliedDate, setAppliedDate] = useState(today);
   const [balance, setBalance] = useState('');
@@ -59,18 +72,17 @@ export function SimulatorPage() {
   const createRecovery = useMutation({
     mutationFn: financeService.createRecovery,
     onSuccess: (plan) => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] });
-      queryClient.invalidateQueries({ queryKey: ['plannings', householdId] });
+      invalidateBudgetQueries(queryClient, householdId);
       toast.success(
         `Ajuste temporal activado: ${formatCents(plan.monthlyAdjustmentCents, currentHousehold?.currency)} al mes.`,
       );
     },
   });
 
-  if (householdPending) return <LoadingState />;
-  if (!householdId) {
-    return <EmptyState action={<Link className="font-bold text-brand-strong" to="/hogar">Crear hogar</Link>} description="El simulador necesita los gastos y el saldo de un hogar." icon={Gauge} title="No hay hogar seleccionado" />;
-  }
+  useHouseholdDraftGuard({
+    dirty: date !== initialDate || balance !== '' || appliedDate !== initialDate || appliedBalance !== undefined || mode !== 'RECOMMENDED' || modeValue !== '',
+    pending: createRecovery.isPending,
+  });
   if (simulation.isPending) return <LoadingState label="Simulando fecha" />;
   if (simulation.isError) return <ErrorState description={simulation.error.message} onRetry={simulation.refetch} />;
 

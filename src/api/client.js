@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { publicEnv } from '../config/env';
 import { createSingleFlight } from './singleFlight';
+import { developmentDateForRequest } from '../features/development/developmentDate';
 
 const API_TIMEOUT_MS = 10_000;
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
@@ -216,6 +217,11 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(attachCsrfToken);
+apiClient.interceptors.request.use((config) => {
+  const date = developmentDateForRequest(config.url);
+  if (date) config.headers = setHeader(config.headers, 'X-Development-Date', date);
+  return config;
+});
 
 apiClient.interceptors.response.use(
   (response) => {

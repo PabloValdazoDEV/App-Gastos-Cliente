@@ -8,6 +8,7 @@ export function invalidateBudgetQueries(queryClient, householdId) {
     queryKeys.invoiceStatistics(householdId),
     queryKeys.variableStatistics(householdId),
     ['dashboard', householdId],
+    ['calendar', householdId],
     ['simulation', householdId],
     ['plannings', householdId],
     queryKeys.monthlyPlanning.all(householdId),

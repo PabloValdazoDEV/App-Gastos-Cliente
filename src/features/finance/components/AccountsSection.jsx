@@ -7,7 +7,9 @@ import { ErrorState, LoadingState } from '../../../components/ui/FeedbackStates'
 import { ConfirmationDialog } from '../../../pages/expensePageShared';
 import { AuthError } from '../../auth/components/AuthFeedback';
 import { FormField } from '../../auth/components/FormField';
+import { useHouseholdDraftGuard } from '../../households/useHouseholdDraftGuard';
 import { financeService } from '../financeService';
+import { invalidateBudgetQueries } from '../invalidateBudgetQueries';
 import { eurosInputToCents, formatCents } from '../money';
 
 const primaryButton =
@@ -81,6 +83,7 @@ export function AccountsSection({ currency, householdId, people }) {
   const [personalPersonId, setPersonalPersonId] = useState('');
   const [balance, setBalance] = useState('');
   const [error, setError] = useState('');
+  const [initialDraft, setInitialDraft] = useState('');
   const accounts = accountsQuery.data ?? [];
   const commonAccounts = accounts.filter((account) => account.scope !== 'PERSONAL');
   const personalAccounts = accounts.filter((account) => account.scope === 'PERSONAL');
@@ -92,7 +95,7 @@ export function AccountsSection({ currency, householdId, people }) {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['accounts', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       setShowForm(false);
       setEditingId(null);
@@ -104,14 +107,20 @@ export function AccountsSection({ currency, householdId, people }) {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['accounts', householdId] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', householdId] }),
+        invalidateBudgetQueries(queryClient, householdId),
       ]);
       setDeletingId(null);
       toast.success('Cuenta eliminada.');
     },
   });
 
+  useHouseholdDraftGuard({
+    dirty: showForm && JSON.stringify([name, scope, personalPersonId, balance]) !== initialDraft,
+    pending: save.isPending || remove.isPending,
+  });
+
   function openCreate() {
+    setInitialDraft(JSON.stringify(['', 'HOUSEHOLD', '', '']));
     setEditingId(null);
     setName('');
     setScope('HOUSEHOLD');
@@ -122,6 +131,7 @@ export function AccountsSection({ currency, householdId, people }) {
   }
 
   function openEdit(account) {
+    setInitialDraft(JSON.stringify([account.name, account.scope, account.personalPersonId ?? '', (account.balanceCents / 100).toFixed(2).replace('.', ',')]));
     setEditingId(account.id);
     setName(account.name);
     setScope(account.scope);

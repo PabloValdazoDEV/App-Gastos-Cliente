@@ -16,6 +16,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../../components/ui/FeedbackStates';
 import { AuthError } from '../auth/components/AuthFeedback';
 import { FormField } from '../auth/components/FormField';
+import { invalidateBudgetQueries } from '../finance/invalidateBudgetQueries';
 import { householdService } from './householdService';
 import { categoryIconLabels, categoryIconOptions as iconOptions } from './categoryIconDefinitions';
 import { CategoryIconBadge } from './categoryIcons';
@@ -267,8 +268,10 @@ export function CategoryManager({ household }) {
     queryFn: () => householdService.listCategories(household.id, { includeArchived: true }),
     queryKey: queryKeys.categories.list(household.id, { includeArchived: true }),
   });
-  const invalidateCategories = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.categories.all(household.id) });
+  const invalidateCategories = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.categories.all(household.id) }),
+    invalidateBudgetQueries(queryClient, household.id),
+  ]);
   const createCategory = useMutation({
     mutationFn: householdService.createCategory,
     onSuccess: async () => {

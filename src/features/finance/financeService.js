@@ -4,7 +4,9 @@ import { getInvoiceDocumentContentType } from './invoiceDocumentSchema';
 const home = (householdId) => `/households/${householdId}`;
 
 export const financeService = {
-  dashboard: (householdId) => http.get(`${home(householdId)}/dashboard`),
+  dashboard: (householdId, date) => date
+    ? http.get(`${home(householdId)}/dashboard`, { params: { date } })
+    : http.get(`${home(householdId)}/dashboard`),
   budget: (householdId) => http.get(`${home(householdId)}/budget`),
   budgetMarginPreferences: (householdId) => http.get(`${home(householdId)}/budget-margin-preferences`),
   setBudgetMarginPreference: ({ householdId, body }) =>
@@ -78,6 +80,8 @@ export const financeService = {
     http.get(`${home(householdId)}/variable-expenses/statistics`),
   saveVariableMonth: ({ householdId, body }) =>
     http.put(`${home(householdId)}/variable-expenses/month`, body),
+  updateVariableExpensePayment: ({ householdId, variableMonthId, entryId, paymentDate }) =>
+    http.patch(`${home(householdId)}/variable-expenses/${variableMonthId}/payment`, { entryId, paymentDate }),
   deleteVariableMonth: ({ householdId, variableMonthId }) =>
     http.delete(`${home(householdId)}/variable-expenses/${variableMonthId}`),
 
@@ -98,13 +102,26 @@ export const financeService = {
   deleteAccount: ({ householdId, accountId }) =>
     http.delete(`${home(householdId)}/accounts/${accountId}`),
 
-  calendar: (householdId, view = '30_DAYS') =>
-    http.get(`${home(householdId)}/calendar`, { params: { view } }),
+  calendar: (householdId, view = '30_DAYS', anchorDate) =>
+    http.get(`${home(householdId)}/calendar`, { params: { view, ...(anchorDate ? { anchorDate } : {}) } }),
   plannings: (householdId) => http.get(`${home(householdId)}/plannings`),
   prepareMonth: ({ householdId, body }) =>
     http.post(`${home(householdId)}/plannings/prepare`, body),
-  fundPlanning: ({ householdId, planningId }) =>
-    http.patch(`${home(householdId)}/plannings/${planningId}/fund`, {}),
+  fundPlanning: ({ householdId, planningId, scope, action, expectedVersion, reason }) =>
+    http.patch(`${home(householdId)}/plannings/${planningId}/fund`, {
+      ...(scope ? { scope } : {}), ...(action ? { action } : {}),
+      ...(expectedVersion === undefined ? {} : { expectedVersion }), ...(reason ? { reason } : {}),
+    }),
+  planningRevisionPreview: ({ householdId, planningId }) =>
+    http.get(`${home(householdId)}/plannings/${planningId}/revision-preview`),
+  revisePlanning: ({ householdId, planningId, body }) =>
+    http.post(`${home(householdId)}/plannings/${planningId}/revisions`, body),
+  previewPlanningExtra: ({ householdId, planningId, body }) =>
+    http.post(`${home(householdId)}/plannings/${planningId}/extras/preview`, body),
+  createPlanningExtra: ({ householdId, planningId, body }) =>
+    http.post(`${home(householdId)}/plannings/${planningId}/extras`, body),
+  changePlanningExtra: ({ householdId, planningId, extraId, body }) =>
+    http.patch(`${home(householdId)}/plannings/${planningId}/extras/${extraId}`, body),
   simulation: (householdId, date, balanceCents) =>
     http.get(`${home(householdId)}/simulation`, {
       params: { date, ...(balanceCents === undefined ? {} : { balanceCents }) },

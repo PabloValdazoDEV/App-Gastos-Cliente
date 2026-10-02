@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, CalendarDays, ListPlus, Pencil, Plus, ShoppingBasket, Trash2, UserRound, UsersRound } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
@@ -43,6 +43,8 @@ const variableEntrySchema = z.object({
   amount: z.string(),
   merchant: z.string().trim().max(120, 'El comercio es demasiado largo.').optional(),
   notes: z.string().trim().max(1_000, 'Las notas son demasiado largas.').optional(),
+  paid: z.boolean(),
+  paymentDate: z.string().nullable().optional(),
   spentOn: z.string().optional(),
 });
 
@@ -53,6 +55,8 @@ const variableSchema = z
     entryMode: z.enum(['SUMMARY', 'DETAIL']),
     notes: z.string().trim().max(2_000, 'Las notas son demasiado largas.').optional(),
     period: z.string().regex(/^\d{4}-\d{2}$/, 'Selecciona un mes.'),
+    summaryPaid: z.boolean(),
+    summaryPaymentDate: z.string().nullable().optional(),
     personalPersonId: z.string().optional(),
     scope: z.enum(['HOUSEHOLD', 'PERSONAL']),
     summaryAmount: z.string().optional(),
@@ -158,7 +162,7 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
     : currentMonthInput();
   const {
     control,
-    formState: { errors },
+    formState: { dirtyFields, errors },
     handleSubmit,
     register,
     setValue,
@@ -171,12 +175,16 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
               amount: centsForInput(entry.amountCents),
               merchant: entry.merchant ?? '',
               notes: entry.notes ?? '',
+              paid: Boolean(entry.paidAt),
+              paymentDate: dateForInput(entry.paidAt) || null,
               spentOn: dateForInput(entry.spentOn) || initialEntryDate(currentPeriod),
             }))
           : [{
               amount: '',
               merchant: '',
               notes: '',
+              paid: initialEntryDate(currentPeriod) <= todayIso(),
+              paymentDate: null,
               spentOn: initialEntryDate(currentPeriod),
             }]),
       ],
@@ -184,6 +192,8 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
       entryMode: initialMonth?.entryMode ?? 'SUMMARY',
       notes: initialMonth?.notes ?? '',
       period: currentPeriod,
+      summaryPaid: initialMonth ? Boolean(initialMonth.paidAt) : currentPeriod <= currentMonthInput(),
+      summaryPaymentDate: dateForInput(initialMonth?.paidAt) || null,
       personalPersonId: initialMonth?.personalPersonId ?? '',
       scope: initialMonth?.scope ?? 'HOUSEHOLD',
       summaryAmount: centsForInput(initialMonth?.summaryAmountCents),
@@ -198,6 +208,20 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
   const scope = watch('scope');
   const bounds = dateBounds(period);
   const periodField = register('period');
+
+  useEffect(() => {
+    if (initialMonth || dirtyFields.summaryPaid) return;
+    setValue('summaryPaid', period <= currentMonthInput(), { shouldDirty: false });
+  }, [dirtyFields.summaryPaid, initialMonth, period, setValue]);
+
+  useEffect(() => {
+    if (initialMonth) return;
+    entries?.forEach((entry, index) => {
+      if (dirtyFields.entries?.[index]?.paid) return;
+      const paidByDefault = Boolean(entry.spentOn && entry.spentOn <= todayIso());
+      if (entry.paid !== paidByDefault) setValue(`entries.${index}.paid`, paidByDefault, { shouldDirty: false });
+    });
+  }, [dirtyFields.entries, entries, initialMonth, setValue]);
 
   const toggleEntryDate = (entryId) => {
     setDateEntryIds((entryIds) =>
@@ -233,12 +257,18 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
                   amountCents: eurosInputToCents(entry.amount),
                   merchant: entry.merchant || null,
                   notes: entry.notes || null,
+                  paymentDate: entry.paid
+                    ? entry.paymentDate || (entry.spentOn <= todayIso() ? entry.spentOn : todayIso())
+                    : null,
                   spentOn: entry.spentOn || initialEntryDate(values.period),
                 }))
               : undefined,
           entryMode: values.entryMode,
           month,
           notes: values.notes || null,
+          paymentDate: values.entryMode === 'SUMMARY'
+            ? values.summaryPaid ? values.summaryPaymentDate || todayIso() : null
+            : null,
           personalPersonId: values.scope === 'PERSONAL' ? values.personalPersonId : null,
           scope: values.scope,
           summaryAmountCents:
@@ -314,18 +344,24 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
           </fieldset>
 
           {entryMode === 'SUMMARY' ? (
-            <FormField
-              error={errors.summaryAmount?.message}
-              inputMode="decimal"
-              label="Total del mes (€)"
-              placeholder="0,00"
-              {...register('summaryAmount')}
-            />
+            <div className="space-y-4">
+              <FormField
+                error={errors.summaryAmount?.message}
+                inputMode="decimal"
+                label="Total del mes (€)"
+                placeholder="0,00"
+                {...register('summaryAmount')}
+              />
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm font-semibold text-text">
+                <input aria-describedby="variable-summary-paid-help" className="mt-1 size-4 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" type="checkbox" {...register('summaryPaid')} />
+                <span>Este total ya está pagado<p className="mt-1 text-xs font-normal leading-5 text-text-muted" id="variable-summary-paid-help">Marcado por defecto para este mes. Si aún queda algo por pagar, desmárcalo.</p></span>
+              </label>
+            </div>
           ) : (
             <fieldset>
               <legend className="text-sm font-bold text-text">Apuntes del mes</legend>
               <p className="mt-1 text-xs leading-5 text-text-muted">
-                El total se calculará exclusivamente desde estos apuntes; no se guarda un resumen adicional.
+                El total se calcula desde los apuntes. Cada apunte queda pagado por defecto si su fecha ya ha llegado.
               </p>
               <div className="mt-4 space-y-4">
                 {fields.map((field, index) => {
@@ -377,6 +413,10 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
                           {...register(`entries.${index}.notes`)}
                         />
                       </div>
+                      <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-text">
+                        <input aria-label={`Apunte ${index + 1} pagado`} className="size-4 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" type="checkbox" {...register(`entries.${index}.paid`)} />
+                        Pagado
+                      </label>
                       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
                         <button
                           aria-expanded={isDateExpanded}
@@ -417,6 +457,8 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
                     amount: '',
                     merchant: '',
                     notes: '',
+                    paid: initialEntryDate(period) <= todayIso(),
+                    paymentDate: null,
                     spentOn: initialEntryDate(period),
                   })
                 }
@@ -734,8 +776,11 @@ export function VariableExpensesPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="break-words font-extrabold text-text">{item.category?.name ?? 'Sin categoría'}</h3>
+                          <StatusBadge>{item.entryMode === 'SUMMARY' ? 'Total mensual' : 'Detallado'}</StatusBadge>
                           <StatusBadge>
-                            {item.entryMode === 'SUMMARY' ? 'Total mensual' : 'Detallado'}
+                            {item.entryMode === 'SUMMARY'
+                              ? item.paidAt ? 'Pagado' : 'Pendiente de confirmar'
+                              : item.entries?.length && item.entries.every((entry) => entry.paidAt) ? 'Todo pagado' : 'Hay pagos pendientes'}
                           </StatusBadge>
                         </div>
                         <p className="mt-1 text-sm text-text-muted">
@@ -789,9 +834,7 @@ export function VariableExpensesPage() {
                             <p className="truncate text-sm font-bold text-text">
                               {entry.merchant || 'Apunte sin comercio'}
                             </p>
-                            <p className="mt-0.5 text-xs text-text-muted">
-                              {formatCivilDate(entry.spentOn)}
-                            </p>
+                            <p className="mt-0.5 text-xs text-text-muted">{formatCivilDate(entry.spentOn)} · {entry.paidAt ? 'Pagado' : 'Pendiente'}</p>
                           </div>
                           <p className="shrink-0 text-sm font-extrabold text-text">
                             {formatCents(entry.amountCents, currency)}

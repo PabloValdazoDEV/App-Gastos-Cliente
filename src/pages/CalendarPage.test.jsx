@@ -67,7 +67,123 @@ describe('Calendario interactivo', () => {
     mocks.registerPayment.mockResolvedValue({ payment: { id: 'new-payment' } });
     mocks.updateRecurringPayment.mockResolvedValue({ id: 'payment-1' });
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('navigates previous and next full months and returns to this month', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'septiembre de 2026' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }));
+    expect(screen.getByRole('heading', { name: 'agosto de 2026' })).toBeVisible();
+    expect(mocks.calendar).toHaveBeenLastCalledWith('household-1', 'MONTH', '2026-08-01');
+    expect(screen.getByRole('button', { name: 'Este mes' })).toHaveAttribute('aria-pressed', 'false');
+    await user.click(screen.getByRole('button', { name: 'Este mes' }));
+    expect(screen.getByRole('heading', { name: 'septiembre de 2026' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
+    expect(mocks.calendar).toHaveBeenLastCalledWith('household-1', 'MONTH', '2026-10-01');
+    for (const name of ['Mes anterior', 'Este mes', 'Mes siguiente']) expect(screen.getByRole('button', { name })).toHaveClass('min-h-12', 'min-w-0');
+  });
+
+  it('crosses December into January without skipping a month on the 31st', async () => {
+    vi.setSystemTime(new Date('2026-12-31T12:00:00Z'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
+    expect(screen.getByRole('heading', { name: 'enero de 2027' })).toBeVisible();
+    expect(mocks.calendar).toHaveBeenLastCalledWith('household-1', 'MONTH', '2027-01-01');
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }));
+    expect(screen.getByRole('heading', { name: 'diciembre de 2026' })).toBeVisible();
+  });
+
+  it('does not display a late response from another month and leaves navigation available during loading and errors', async () => {
+    let finish;
+    mocks.calendar.mockImplementation((householdId, view, anchor) => anchor === '2026-08-01'
+      ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(calendar([occurrence({ name: 'Gasto septiembre' })])));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('Gasto septiembre');
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }));
+    expect(screen.getByText('Cargando gastos')).toBeVisible();
+    expect(screen.queryByText('Gasto septiembre')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Este mes' }));
+    await act(async () => finish(calendar([occurrence({ name: 'Gasto agosto' })])));
+    expect(screen.queryByText('Gasto agosto')).not.toBeInTheDocument();
+    expect(screen.getByText('Gasto septiembre')).toBeVisible();
+    mocks.calendar.mockRejectedValue(new Error('Error de octubre'));
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
+    expect(await screen.findByText('Error de octubre')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Mes anterior' })).toBeEnabled();
+  });
+
+  it('asks before closing a payment draft when navigating months', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderPage();
+    await openPaid(user);
+    await user.type(screen.getByLabelText('Notas (opcional)'), 'Borrador');
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText('Notas (opcional)')).toHaveValue('Borrador');
+    expect(screen.getByRole('heading', { name: 'septiembre de 2026' })).toBeVisible();
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
+    expect(screen.queryByLabelText('Notas (opcional)')).not.toBeInTheDocument();
+    expect(mocks.registerPayment).not.toHaveBeenCalled();
+  });
+
+  it('only offers monthly navigation without the redundant range selector', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.queryByText('Cómo leer el calendario')).not.toBeInTheDocument();
+    for (const name of ['Mes', '30 días', '90 días', 'Año']) expect(screen.queryByRole('button', { name, exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Rango del calendario' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mes anterior' }));
+    expect(mocks.calendar).toHaveBeenLastCalledWith('household-1', 'MONTH', '2026-08-01');
+    expect(screen.getByRole('heading', { name: 'agosto de 2026' })).toBeVisible();
+  });
+
+  it('abre el mes completo y muestra todos los tipos sin confundir registros con pagos', async () => {
+    mocks.calendar.mockResolvedValue(calendar([
+      occurrence(),
+      { id: 'invoice', sourceType: 'INVOICE', name: 'Luz', dueDate: '2026-09-02', dateBasis: 'CHARGE_DATE', status: 'RECORDED', amountCents: 2300, scope: 'HOUSEHOLD' },
+      { id: 'variable', sourceType: 'VARIABLE_EXPENSE', name: 'Supermercado', dueDate: '2026-09-02', status: 'RECORDED', amountCents: 1800, scope: 'HOUSEHOLD' },
+      { id: 'summary', sourceType: 'VARIABLE_SUMMARY', name: 'Comida', dueDate: '2026-09-01', datePrecision: 'MONTH', status: 'RECORDED', amountCents: 0, scope: 'HOUSEHOLD' },
+      { id: 'one-time', sourceType: 'ONE_TIME_EXPENSE', name: 'Reparación', dueDate: '2026-09-02', status: 'UNCONFIRMED', amountCents: 4900, expectedAmountCents: 4900, scope: 'HOUSEHOLD' },
+    ]));
+    renderPage();
+    const cards = await screen.findAllByRole('listitem');
+    expect(mocks.calendar).toHaveBeenCalledWith('household-1', 'MONTH', '2026-09-01');
+    expect(screen.getByRole('button', { name: 'Este mes' })).toHaveAttribute('aria-pressed', 'true');
+    expect(cards).toHaveLength(5);
+    expect(cards[1]).toHaveTextContent('Cobro: 2 sept 2026');
+    expect(cards[1]).toHaveTextContent('Importe registrado');
+    expect(within(cards[1]).getByRole('link', { name: 'Ver facturas' })).toHaveAttribute('href', '/facturas');
+    expect(cards[2]).toHaveTextContent('18,00');
+    expect(within(cards[2]).getByRole('link', { name: 'Ver gastos variables' })).toHaveAttribute('href', '/gastos/variables');
+    expect(cards[3]).toHaveTextContent('septiembre de 2026');
+    expect(cards[3]).toHaveTextContent('0,00');
+    expect(cards[3]).toHaveTextContent('Total del mes completo, sin día concreto');
+    expect(cards[4]).toHaveTextContent('Sin pago confirmado');
+    expect(cards[4]).toHaveTextContent('Importe previsto');
+    expect(within(cards[4]).getByRole('link', { name: 'Ver gastos puntuales' })).toHaveAttribute('href', '/gastos/puntuales');
+    for (const card of cards.slice(1)) {
+      expect(within(card).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Pagado')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Atrasado')).not.toBeInTheDocument();
+    }
+  });
+
+  it('conserva distintas facturas del mismo día al refrescar el calendario', async () => {
+    const invoice = { sourceType: 'INVOICE', dueDate: '2026-09-02', status: 'RECORDED', amountCents: 100, scope: 'HOUSEHOLD' };
+    mocks.calendar.mockResolvedValue(calendar([{ ...invoice, id: 'first', name: 'Primera factura' }, { ...invoice, id: 'second', name: 'Segunda factura' }]));
+    const { client } = renderPage();
+    expect(await screen.findAllByRole('listitem')).toHaveLength(2);
+    await act(async () => { client.setQueryData(['calendar', 'household-1', 'MONTH', '2026-09-01'], calendar([{ ...invoice, id: 'second', name: 'Segunda factura actualizada', amountCents: 300 }])); });
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
+    expect(screen.queryByText('Primera factura')).not.toBeInTheDocument();
+    expect(screen.getByRole('listitem')).toHaveTextContent('Segunda factura actualizada');
+    expect(screen.getByRole('listitem')).toHaveTextContent('3,00');
+  });
 
   it('solo ofrece acciones para el evento autorizado por backend, no sus proyecciones', async () => {
     mocks.calendar.mockResolvedValue(calendar([
@@ -321,16 +437,17 @@ describe('Calendario interactivo', () => {
     expect(screen.getByRole('form', { name: 'Registrar pago de Alquiler' })).toBeInTheDocument();
   });
 
-  it('cambiar rango cierra el formulario y conserva los cuatro rangos', async () => {
+  it('cambiar mes cierra el formulario tras confirmarlo y conserva la navegación accesible', async () => {
     const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPage();
     await openPaid(user);
-    await user.click(screen.getByRole('button', { name: '90 días' }));
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '90 días' })).toHaveAttribute('aria-pressed', 'true');
-    await waitFor(() => expect(mocks.calendar).toHaveBeenCalledWith('household-1', '90_DAYS'));
-    for (const name of ['Este mes', '30 días', '90 días', 'Año']) expect(screen.getByRole('button', { name })).toHaveClass('min-h-11');
-    expect(screen.getByRole('group', { name: 'Rango del calendario' })).toHaveClass('flex-wrap');
+    expect(screen.getByRole('button', { name: 'Este mes' })).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() => expect(mocks.calendar).toHaveBeenCalledWith('household-1', 'MONTH', '2026-10-01'));
+    for (const name of ['Mes anterior', 'Este mes', 'Mes siguiente']) expect(screen.getByRole('button', { name })).toHaveClass('min-h-12');
+    expect(screen.getByRole('group', { name: 'Cambiar mes' })).toHaveClass('grid-cols-3');
   });
 
   it('un refresco externo que resuelve el vencimiento cierra el borrador y restaura el foco', async () => {
@@ -338,7 +455,7 @@ describe('Calendario interactivo', () => {
     const { client } = renderPage();
     await openPaid(user);
     await user.click(screen.getByLabelText('Notas (opcional)'));
-    await act(async () => { client.setQueryData(['calendar', 'household-1', '30_DAYS'], calendar([registered()])); });
+    await act(async () => { client.setQueryData(['calendar', 'household-1', 'MONTH', '2026-09-01'], calendar([registered()])); });
     await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Gimnasio' })).toHaveFocus());
     expect(screen.getByRole('button', { name: 'Editar registro' })).toHaveAttribute('aria-expanded', 'false');
@@ -350,7 +467,7 @@ describe('Calendario interactivo', () => {
     const { client, container } = renderPage();
     await openPaid(user);
     await user.click(screen.getByLabelText('Notas (opcional)'));
-    await act(async () => { client.setQueryData(['calendar', 'household-1', '30_DAYS'], calendar([])); });
+    await act(async () => { client.setQueryData(['calendar', 'household-1', 'MONTH', '2026-09-01'], calendar([])); });
     await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument());
     await waitFor(() => expect(container.firstElementChild).toHaveFocus());
     expect(mocks.registerPayment).not.toHaveBeenCalled();
@@ -370,10 +487,10 @@ describe('Calendario interactivo', () => {
     mocks.calendar.mockRejectedValueOnce(new Error('Calendario no disponible.'));
     mocks.calendar.mockResolvedValue(calendar([]));
     renderPage();
-    expect(screen.getByRole('status')).toHaveTextContent('Cargando vencimientos');
+    expect(screen.getByRole('status')).toHaveTextContent('Cargando gastos');
     expect(await screen.findByText('Calendario no disponible.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Volver a intentarlo' }));
-    expect(await screen.findByRole('heading', { name: 'No hay pagos programados' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No hay gastos en este periodo' })).toBeInTheDocument();
   });
 
   it('sin hogar no consulta calendario ni ofrece acciones de pago', () => {

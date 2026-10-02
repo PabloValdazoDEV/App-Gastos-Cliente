@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 
 import { queryKeys } from '../../api/queryKeys';
 import { householdService } from './householdService';
@@ -24,6 +25,25 @@ export function HouseholdProvider({ children }) {
   const households = useMemo(() => query.data ?? [], [query.data]);
   const currentHousehold =
     households.find((household) => household.id === selectedId) ?? households[0] ?? null;
+  const switchGuards = useRef(new Map());
+  const registerSwitchGuard = useCallback((guard) => {
+    const key = Symbol('household-draft');
+    switchGuards.current.set(key, guard);
+    return () => switchGuards.current.delete(key);
+  }, []);
+  const currentHouseholdId = currentHousehold?.id;
+  const selectHousehold = useCallback((id) => {
+    if (id === currentHouseholdId) return;
+    const guards = [...switchGuards.current.values()];
+    if (guards.some((guard) => guard.pending)) {
+      toast.error('Espera a que termine la operación antes de cambiar de hogar.');
+      return;
+    }
+    if (guards.some((guard) => guard.dirty) && !window.confirm(
+      'Hay cambios o una simulación en este hogar. Si cambias de hogar se descartarán. ¿Cambiar de hogar?',
+    )) return;
+    setSelectedId(id);
+  }, [currentHouseholdId]);
 
   useEffect(() => {
     if (!currentHousehold || currentHousehold.id === selectedId) return;
@@ -50,11 +70,11 @@ export function HouseholdProvider({ children }) {
       isError: query.isError,
       error: query.error,
       refetch: query.refetch,
-      selectHousehold: setSelectedId,
+      selectHousehold,
+      registerSwitchGuard,
     }),
-    [currentHousehold, households, query.error, query.isError, query.isPending, query.refetch],
+    [currentHousehold, households, query.error, query.isError, query.isPending, query.refetch, selectHousehold, registerSwitchGuard],
   );
 
   return <HouseholdContext.Provider value={value}>{children}</HouseholdContext.Provider>;
 }
-

@@ -2,8 +2,11 @@ import { z } from 'zod';
 
 import { todayIso } from '../../pages/expensePageUtils';
 import { eurosInputToCents, isoDate } from '../finance/money';
+import { getDevelopmentDate } from '../development/developmentDate';
 
 export function purchasePaymentToday(timezone) {
+  const simulated = getDevelopmentDate();
+  if (simulated) return simulated;
   if (!timezone) return todayIso();
   try {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());

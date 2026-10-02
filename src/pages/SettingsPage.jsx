@@ -1,57 +1,62 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
 import { queryKeys } from '../api/queryKeys';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
 import { CategoryManager } from '../features/households/CategoryManager';
 import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
+import { useHouseholdDraftGuard } from '../features/households/useHouseholdDraftGuard';
+import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
 
 export function SettingsPage() {
-  const { currentHousehold } = useHousehold();
-  const householdId = currentHousehold?.id;
-  const householdSafetyMarginBps = currentHousehold?.safetyMarginBps;
-  const [margin, setMargin] = useState(
-    currentHousehold ? String(currentHousehold.safetyMarginBps / 100) : '10',
-  );
+  const { currentHousehold, isPending, isError, error, refetch } = useHousehold();
+  if (isPending) return <LoadingState label="Cargando preferencias" />;
+  if (isError) return <ErrorState description={error?.message} onRetry={refetch} />;
+  if (!currentHousehold) {
+    return <EmptyState action={<Link className="font-bold text-brand-strong" to="/hogar">Crear hogar</Link>} description="Las preferencias financieras pertenecen a un hogar." icon={Settings} title="No hay hogar seleccionado" />;
+  }
+  return <HouseholdSettings currentHousehold={currentHousehold} key={currentHousehold.id} />;
+}
+
+function HouseholdSettings({ currentHousehold }) {
+  const [draftMargin, setMargin] = useState(null);
+  const margin = draftMargin ?? String(currentHousehold.safetyMarginBps / 100);
   const canManage = ['ADMIN', 'OWNER'].includes(currentHousehold?.access?.role);
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: householdService.update,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.households.all() });
-      queryClient.invalidateQueries({ queryKey: ['budget', currentHousehold.id] });
+    onSuccess: async (_updated, { householdId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.households.all() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories.all(householdId) }),
+        invalidateBudgetQueries(queryClient, householdId),
+      ]);
+      setMargin(null);
       toast.success('Margen de seguridad actualizado.');
     },
   });
 
-  useEffect(() => {
-    if (Number.isInteger(householdSafetyMarginBps)) {
-      setMargin(String(householdSafetyMarginBps / 100));
-    }
-  }, [householdId, householdSafetyMarginBps]);
-
-  if (!currentHousehold) {
-    return <EmptyState action={<Link className="font-bold text-brand-strong" to="/hogar">Crear hogar</Link>} description="Las preferencias financieras pertenecen a un hogar." icon={Settings} title="No hay hogar seleccionado" />;
-  }
+  useHouseholdDraftGuard({ dirty: margin.replace(',', '.') !== String(currentHousehold.safetyMarginBps / 100), pending: mutation.isPending });
 
   return (
     <div className="space-y-8">
       <PageHeader title="Preferencias" />
       <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7" aria-labelledby="security-margin">
         <h2 className="text-lg font-bold" id="security-margin">Margen de seguridad general</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">Se añade a la previsión mensual. Una categoría o un gasto recurrente pueden sobrescribirlo.</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">Se añade a la previsión mensual. Una categoría o un gasto recurrente pueden tener su propio margen. Usa 0 % si no quieres margen general. Las previsiones ya guardadas conservan sus aportaciones.</p>
         {canManage ? (
           <form
             className="mt-5 flex max-w-sm flex-col gap-3"
             onSubmit={(event) => {
               event.preventDefault();
               const numeric = Number(String(margin).replace(',', '.'));
-              if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) {
+              if (!/^\d{1,3}(?:[.,]\d{1,2})?$/.test(margin.trim()) || !Number.isFinite(numeric) || numeric < 0 || numeric > 100) {
                 toast.error('El margen debe estar entre 0 y 100 %.');
                 return;
               }
@@ -63,7 +68,7 @@ export function SettingsPage() {
           >
             <label className="text-sm font-bold" htmlFor="general-margin">Porcentaje de margen</label>
             <div className="flex items-center gap-2">
-              <input className="min-h-12 min-w-0 flex-1 rounded-xl border border-border-strong px-3" id="general-margin" inputMode="decimal" max="100" min="0" onChange={(event) => setMargin(event.target.value)} required step="0.01" type="text" value={margin} />
+              <input className="min-h-12 min-w-0 flex-1 rounded-xl border border-border-strong px-3" disabled={mutation.isPending} id="general-margin" inputMode="decimal" max="100" min="0" onChange={(event) => setMargin(event.target.value)} required step="0.01" type="text" value={margin} />
               <span aria-hidden="true" className="font-bold">%</span>
             </div>
             <button className="min-h-12 rounded-xl bg-brand px-5 font-bold text-on-brand disabled:opacity-60" disabled={mutation.isPending} type="submit">{mutation.isPending ? 'Guardando…' : 'Guardar margen'}</button>

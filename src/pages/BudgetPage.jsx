@@ -89,12 +89,12 @@ export function BudgetPage() {
               <p className="mt-1 text-xs text-text-muted">Incluye {formatCents(budget.householdMarginCents, currentHousehold.currency)} de margen</p>
             </article>
             <article className="min-w-0 rounded-2xl border border-border bg-surface p-5 [overflow-wrap:anywhere]">
-              <p className="text-sm font-semibold text-text-muted">Gastos personales</p>
+              <p className="text-sm font-semibold text-text-muted">Tus gastos personales</p>
               <p className="mt-2 text-2xl font-extrabold">{formatCents(budget.personalBudgetCents, currentHousehold.currency)}</p>
               <p className="mt-1 text-xs text-text-muted">Incluye {formatCents(budget.personalMarginCents, currentHousehold.currency)} de margen</p>
             </article>
             <article className="min-w-0 rounded-2xl bg-brand-deep p-5 text-on-brand [overflow-wrap:anywhere]">
-              <p className="text-sm font-semibold text-on-brand-muted">Total recomendado</p>
+              <p className="text-sm font-semibold text-on-brand-muted">Total conjunto y tus gastos personales</p>
               <p className="mt-2 text-2xl font-extrabold">{formatCents(budget.recommendedBudgetCents, currentHousehold.currency)}</p>
             </article>
           </section>
@@ -111,7 +111,7 @@ export function BudgetPage() {
                     </div>
                     <p className="min-w-0 max-w-full text-xl font-extrabold">{formatCents(item.totalStandardCents, currentHousehold.currency)}</p>
                   </div>
-                  {item.personalExpenseCents ? (
+                  {item.personalAmountsHidden ? <p className="mt-3 text-xs text-text-muted">Solo aportación conjunta. Gastos personales: privado / no disponible.</p> : item.personalExpenseCents ? (
                     <p className="mt-3 text-xs text-text-soft">Incluye {formatCents(item.personalExpenseCents, currentHousehold.currency)} de gastos personales.</p>
                   ) : null}
                 </article>

@@ -333,10 +333,11 @@ describe('HouseholdPage', () => {
         body: {
           contributionDay: 15,
           name: household.name,
-          safetyMarginBps: 1000,
         },
       }),
     );
+    expect(screen.queryByLabelText('Margen general (%)')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Cambiar margen en Preferencias' })).toHaveAttribute('href', '/mas/ajustes');
   });
 
   it('muestra el día pero no permite editarlo a un miembro', async () => {

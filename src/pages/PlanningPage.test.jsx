@@ -1,221 +1,209 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  dashboard: vi.fn(),
-  plannings: vi.fn(),
-  fundPlanning: vi.fn(),
-  prepareMonth: vi.fn(),
-  updateRecovery: vi.fn(),
-  success: vi.fn(),
+  dashboard: vi.fn(), fundPlanning: vi.fn(), prepareMonth: vi.fn(), updateRecovery: vi.fn(), success: vi.fn(),
   household: { currentHousehold: { currency: 'EUR', id: 'household-1' }, isPending: false },
 }));
-
 vi.mock('react-hot-toast', () => ({ default: { success: mocks.success, error: vi.fn() } }));
-
-vi.mock('../features/finance/financeService', () => ({
-  financeService: {
-    dashboard: mocks.dashboard,
-    fundPlanning: mocks.fundPlanning,
-    plannings: mocks.plannings,
-    prepareMonth: mocks.prepareMonth,
-    updateRecovery: mocks.updateRecovery,
-  },
-}));
-
-vi.mock('../features/households/useHousehold', () => ({
-  useHousehold: () => mocks.household,
-}));
-
+vi.mock('../features/finance/financeService', () => ({ financeService: mocks }));
+vi.mock('../features/households/useHousehold', () => ({ useHousehold: () => mocks.household }));
+vi.mock('./expensePageUtils', () => ({ todayIso: () => '2026-10-29' }));
 import { PlanningPage } from './PlanningPage';
 
-function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
+function forecast(overrides = {}) {
+  return { balanceCents: 90000, budget: { contributions: [{ personId: 'person-1', personName: 'Pablo' }],
+    readiness: { ready: true }, recommendedBudgetCents: 100000,
+    lines: [{ id: 'extra', name: 'Compra noviembre', type: 'ONE_TIME', scope: 'HOUSEHOLD', amountCents: 11000, baseCents: 10000 }] }, ...overrides };
+}
+function planning(overrides = {}) {
+  return { id: 'planning-1', calculationDate: '2026-11-01', month: 11, year: 2026, fundingStatus: 'PREPARED',
+    contributions: [{ id: 'c1', householdPersonId: 'person-1', personName: 'Pablo', personalExpenseCents: 10000,
+      standardHouseholdCents: 40000, temporaryAdjustmentCents: 2000, totalRecommendedCents: 52000,
+      canConfirmPersonal: true, funding: { pendingCents: 52000, confirmedCents: 0, commonConfirmed: false, personalConfirmed: false } }], ...overrides };
+}
+function renderPage(entry = '/planificacion') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidate = vi.spyOn(client, 'invalidateQueries');
-  const tree = () => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <PlanningPage />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+  const tree = () => <QueryClientProvider client={client}><MemoryRouter initialEntries={[entry]}><PlanningPage /></MemoryRouter></QueryClientProvider>;
   const result = render(tree());
   return { ...result, client, invalidate, refresh: () => result.rerender(tree()) };
 }
-
-describe('PlanningPage', () => {
+describe('PlanningPage salary month forecast', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.household.currentHousehold = { currency: 'EUR', id: 'household-1' };
-    mocks.fundPlanning.mockResolvedValue({ id: 'planning-1', fundingStatus: 'FUNDED' });
+    mocks.dashboard.mockResolvedValue(forecast());
     mocks.prepareMonth.mockResolvedValue({ id: 'planning-1' });
-    mocks.updateRecovery.mockResolvedValue({ id: 'recovery-1' });
-    mocks.dashboard.mockResolvedValue({
-      activeRecoveryPlan: { id: 'recovery-1', monthlyAdjustmentCents: 4_000 },
-      balanceCents: 90_000,
-      budget: {
-        contributions: [
-          { personId: 'person-1', personName: 'Pablo' },
-        ],
-        readiness: { ready: true },
-        recommendedBudgetCents: 100_000,
-      },
-      theoreticalReserveCents: 60_000,
-    });
-    mocks.plannings.mockResolvedValue([
-      {
-        calculationDate: '2026-09-05',
-        contributions: [
-          {
-            id: 'contribution-1',
-            personName: 'Pablo',
-            personalExpenseCents: 10_000,
-            standardHouseholdCents: 40_000,
-            temporaryAdjustmentCents: 2_000,
-            totalRecommendedCents: 52_000,
-          },
-        ],
-        fundingStatus: 'PREPARED',
-        id: 'planning-1',
-        month: 9,
-        year: 2026,
-      },
-    ]);
+    mocks.fundPlanning.mockResolvedValue({ id: 'planning-1' });
+    mocks.updateRecovery.mockResolvedValue({});
   });
-
-  it('muestra siempre el desglose estándar, ajuste y total preparado', async () => {
+  it('keeps the initial amount fixed and includes extras in confirmed and pending totals', async () => {
+    const saved = planning({ fundingStatus: 'FUNDED', extraFunding: { agreedCents: 8000, pendingCents: 4000 } });
+    saved.contributions[0] = { ...saved.contributions[0], extraFunding: { agreedCents: 8000, pendingCents: 4000 }, totalConfirmedCents: 56000, totalPendingCents: 4000 };
+    mocks.dashboard.mockResolvedValue(forecast({ planning: saved }));
     renderPage();
-
-    expect(await screen.findByText('Último mes preparado')).toBeInTheDocument();
-    const contribution = screen.getByRole('article', {
-      name: 'Aportación preparada de Pablo',
-    });
-    expect(within(contribution).getByText('Aportación conjunta')).toBeInTheDocument();
-    expect(within(contribution).getByText('Gastos personales')).toBeInTheDocument();
-    expect(within(contribution).getByText(/400,00/)).toBeInTheDocument();
-    expect(within(contribution).getByText(/100,00/)).toBeInTheDocument();
-    expect(within(contribution).getByText('Ajuste conjunto')).toBeInTheDocument();
-    expect(within(contribution).getByText(/^20,00/)).toBeInTheDocument();
-    expect(within(contribution).getByText('Total a aportar')).toBeInTheDocument();
-    expect(within(contribution).getByText(/^520,00/)).toBeInTheDocument();
-
-    expect(screen.getByText('Total calculado')).toBeInTheDocument();
-    expect(screen.getByLabelText('Fecha de cálculo').parentElement).toHaveClass('min-w-0');
-    expect(screen.getByText(/^1040,00/)).toBeInTheDocument();
-    expect(screen.getByText(/Confirma los saldos registrados/)).toHaveTextContent('no representa el presupuesto que queda por utilizar ni una consulta a tu banco');
-    expect(screen.queryByText(/en números rojos/i)).not.toBeInTheDocument();
+    const card = await screen.findByRole('article', { name: 'Aportación preparada de Pablo' });
+    expect(within(card).getByText('Aportación prevista guardada').nextElementSibling).toHaveTextContent('520,00');
+    expect(within(card).getByText('Extra conjunto acordado').nextElementSibling).toHaveTextContent('80,00');
+    expect(within(card).getByText('Ya confirmado').nextElementSibling).toHaveTextContent('560,00');
+    expect(within(card).getByText('Pendiente de aportar').nextElementSibling).toHaveTextContent('40,00');
+    expect(screen.getByText('Aportación inicial confirmada · Extras pendientes')).toBeVisible();
+    expect(screen.queryByText('Fondos del mes confirmados')).not.toBeInTheDocument();
   });
-
-  it('no vuelve a pedir los saldos cuando el mes actual ya está confirmado', async () => {
-    mocks.dashboard.mockResolvedValue({
-      balanceCents: 90_000,
-      budget: {
-        contributions: [{ personId: 'person-1', personName: 'Pablo' }],
-        readiness: { ready: true },
-        recommendedBudgetCents: 100_000,
-      },
-      planning: {
-        calculationDate: '2026-09-05',
-        contributions: [],
-        fundingStatus: 'FUNDED',
-        id: 'planning-current',
-        month: 9,
-        year: 2026,
-      },
-      theoreticalReserveCents: 60_000,
-    });
-
-    renderPage();
-
-    expect(await screen.findByText('Este mes ya está calculado')).toBeInTheDocument();
-    expect(screen.queryByText('Confirmar saldos del mes')).not.toBeInTheDocument();
-    expect(screen.getByText(/Las aportaciones se calcularon/)).toHaveTextContent('Consulta en Inicio el presupuesto restante');
+  it('salary in October defaults to November 1–30, with matching preview and saved request', async () => {
+    const user = userEvent.setup();
+    const { invalidate } = renderPage();
+    expect(screen.getByLabelText('Mes a financiar')).toHaveValue('2026-11');
+    expect(screen.getByText(/del día 1 al 30/)).toBeVisible();
+    await user.click(await screen.findByRole('button', { name: 'Guardar previsión del mes' }));
+    expect(mocks.dashboard).toHaveBeenCalledWith('household-1', '2026-11-01');
+    await waitFor(() => expect(mocks.prepareMonth).toHaveBeenCalledWith({
+      householdId: 'household-1', body: { calculationDate: '2026-11-01', confirmedBalanceCents: 90000,
+        confirmedPersonalBalances: [{ personId: 'person-1', balanceCents: 0 }] },
+    }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] });
+    expect(screen.getByText(/no se descuentan automáticamente/)).toBeVisible();
   });
-
-  it('explica el presupuesto actualizado sin volver a confirmar saldos ni sobrescribir la preparación', async () => {
-    mocks.dashboard.mockResolvedValue({
-      budget: { contributions: [], readiness: { ready: true }, recommendedBudgetCents: 105000 },
-      planning: { id: 'current', calculationDate: '2026-09-05', month: 9, year: 2026, contributions: [], fundingStatus: 'FUNDED', budgetChangedSincePreparation: true },
-    });
+  it('shows extraordinary expenses and their included margin in the breakdown', async () => {
+    const user = userEvent.setup();
     renderPage();
-    const notice = await screen.findByText(/El presupuesto ha cambiado desde que preparaste el mes/);
-    expect(notice).toHaveTextContent('El presupuesto ha cambiado');
-    expect(notice).toHaveTextContent('Conservamos los saldos confirmados y el registro de preparación original');
-    expect(screen.queryByText('Confirmar saldos del mes')).not.toBeInTheDocument();
+    await user.click(await screen.findByText('Desglose de la previsión'));
+    expect(screen.getByText('Compra noviembre')).toBeVisible();
+    expect(screen.getByText(/Extraordinario del mes/)).toBeVisible();
+    expect(screen.getByText(/Incluye 10,00/)).toBeVisible();
+  });
+  it('labels an estimated variable month closing in the saved breakdown without claiming it is final', async () => {
+    const user = userEvent.setup();
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning({ budgetLines: [{ id: 'food', name: 'Supermercado', type: 'VARIABLE', scope: 'HOUSEHOLD', baseCents: 50000, amountCents: 55000, estimatedClosingMonth: '2026-10' }] }) }));
+    renderPage();
+    await user.click(await screen.findByText('Desglose de la previsión'));
+    expect(screen.getByText(/La media incluye octubre de 2026 como cierre estimado/)).toBeVisible();
+    expect(screen.getByText(/No es un cierre definitivo/)).toBeVisible();
+    expect(screen.getByText(/Incluye 50,00/)).toBeVisible();
+  });
+  it('keeps frozen contributions and displays changes separately, not as new transfers', async () => {
+    const user = userEvent.setup();
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning({ budgetChangedSincePreparation: true,
+      budgetComparison: { householdDifferenceCents: 8000, personalDifferenceCents: 0, lines: [{ id: 'new', name: 'Factura nueva', previousCents: 0, currentCents: 8000 }] } }) }));
+    renderPage();
+    expect(await screen.findByText('Previsión del mes guardada')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Guardar previsión del mes' })).not.toBeInTheDocument();
+    const card = screen.getByRole('article', { name: 'Aportación preparada de Pablo' });
+    expect(within(card).getByText('Aportación prevista guardada')).toBeVisible();
+    expect(within(card).getAllByText(/520,00/)).toHaveLength(2);
+    expect(screen.getByText('Hay cambios en los gastos; tus aportaciones guardadas se mantienen.')).toBeVisible();
+    expect(screen.getByText(/Conservamos las aportaciones originales/)).not.toBeVisible();
+    expect(screen.getByText(/Factura nueva:/)).not.toBeVisible();
+    await user.click(screen.getByText('Ver cambios'));
+    expect(screen.getByText(/Conservamos las aportaciones originales/)).toBeVisible();
+    expect(screen.getByText(/Factura nueva:/)).toBeVisible();
+    await user.click(screen.getByText('Ver cambios'));
+    expect(screen.getByText(/Factura nueva:/)).not.toBeVisible();
+    expect(within(card).getAllByText(/520,00/)).toHaveLength(2);
     expect(mocks.prepareMonth).not.toHaveBeenCalled();
+    expect(mocks.fundPlanning).not.toHaveBeenCalled();
   });
-
-  it('explica la ocultación de datos personales históricos de preparaciones antiguas', async () => {
-    mocks.plannings.mockResolvedValue([{ id: 'legacy', contributions: [], fundingStatus: 'FUNDED', calculationDate: '2026-09-05', personalHistoryRequiresConfirmation: true }]);
+  it('keeps a negative deviation and unavailable personal history inside the optional disclosure', async () => {
+    const user = userEvent.setup();
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning({ revision: 2, budgetChangedSincePreparation: true,
+      budgetComparison: { householdDifferenceCents: -6817, personalDifferenceCents: null, lines: [{ id: 'water', name: 'Agua', previousCents: 1835, currentCents: 1668 }] } }) }));
     renderPage();
-    expect(await screen.findByText(/Sus datos originales se conservan, pero por privacidad/)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Actualiza tu saldo en Cuentas' })).toHaveAttribute('href', '/cuentas');
+    const summary = await screen.findByText('Ver cambios');
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByText(/Diferencia conjunta:/)).not.toBeVisible();
+    await user.click(summary);
+    expect(screen.getByText(/Diferencia conjunta:/)).toHaveTextContent('-68,17 €');
+    expect(screen.getByText(/Diferencia conjunta:/)).toHaveTextContent('histórico no disponible');
+    expect(screen.getByText(/Conservamos las aportaciones de la revisión guardada/)).toBeVisible();
+    expect(screen.getByText(/Agua:/)).toBeVisible();
   });
-
-  it('confirmar saldos recalcula todas las variantes del Dashboard', async () => {
-    const user = userEvent.setup();
-    const { invalidate } = renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Confirmar saldos y calcular mes' }));
-    await waitFor(() => expect(mocks.prepareMonth).toHaveBeenCalledWith(expect.objectContaining({
-      householdId: 'household-1',
-      body: expect.objectContaining({ confirmedBalanceCents: 90_000 }),
-    })));
-    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
+  it('shows only the compact saved notice when there are no changes to review', async () => {
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning() }));
+    renderPage();
+    expect(await screen.findByText('Previsión del mes guardada')).toBeVisible();
+    expect(screen.getByText('Tus aportaciones guardadas se mantienen.')).toBeVisible();
+    expect(screen.queryByText('Ver cambios')).not.toBeInTheDocument();
   });
-
   it.each([
-    ['Confirmar fondos del mes', 'fundPlanning'],
-    ['Marcar como recuperado', 'updateRecovery'],
-  ])('%s refresca el Dashboard tras guardar', async (action, mutation) => {
+    ['Confirmar todas las transferencias conjuntas realizadas', 'HOUSEHOLD'],
+    ['Confirmar mi aportación personal realizada', 'PERSONAL'],
+  ])('confirms %s independently and invalidates all dashboard variants', async (label, scope) => {
     const user = userEvent.setup();
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning() }));
     const { invalidate } = renderPage();
-    await user.click(await screen.findByRole('button', { name: action }));
-    await waitFor(() => expect(mocks[mutation]).toHaveBeenCalledOnce());
-    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
+    await user.click(await screen.findByRole('button', { name: label }));
+    await waitFor(() => expect(mocks.fundPlanning).toHaveBeenCalledWith({ householdId: 'household-1', planningId: 'planning-1', scope }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] });
   });
-
-  it('cambiar de hogar descarta saldos y fecha anteriores antes de preparar el nuevo mes', async () => {
+  it('funded plans show zero pending and no duplicate confirmation buttons', async () => {
+    const saved = planning({ fundingStatus: 'FUNDED' });
+    saved.contributions[0].funding = { confirmedCents: 52000, pendingCents: 0, commonConfirmed: true, personalConfirmed: true };
+    mocks.dashboard.mockResolvedValue(forecast({ planning: saved }));
+    renderPage();
+    expect(await screen.findByText('Fondos del mes confirmados')).toBeVisible();
+    const card = screen.getByRole('article', { name: 'Aportación preparada de Pablo' });
+    expect(within(card).getByText('Pendiente de aportar').nextElementSibling).toHaveTextContent('0,00');
+    expect(screen.queryByRole('button', { name: /Confirmar/ })).not.toBeInTheDocument();
+  });
+  it('reports funding failures without pretending success', async () => {
+    const user = userEvent.setup();
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning() }));
+    mocks.fundPlanning.mockRejectedValue(new Error('No se ha podido guardar la confirmación.'));
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Confirmar mi aportación personal realizada' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se ha podido guardar');
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+  it('month switch clears balances, uses isolated cache keys and never falls back to another saved month', async () => {
+    const user = userEvent.setup();
+    mocks.dashboard.mockImplementation((_id, date) => Promise.resolve(date === '2026-12-01' ? forecast({ planning: planning({ month: 12 }) }) : forecast()));
+    renderPage();
+    await user.clear(await screen.findByLabelText('Saldo de la cuenta conjunta'));
+    await user.type(screen.getByLabelText('Saldo de la cuenta conjunta'), '1234');
+    fireEvent.change(screen.getByLabelText('Mes a financiar'), { target: { value: '2026-12' } });
+    expect(await screen.findByText('Previsión del mes guardada')).toBeVisible();
+    expect(screen.queryByLabelText('Saldo de la cuenta conjunta')).not.toBeInTheDocument();
+    expect(mocks.dashboard).toHaveBeenCalledWith('household-1', '2026-12-01');
+    fireEvent.change(screen.getByLabelText('Mes a financiar'), { target: { value: '2026-11' } });
+    await waitFor(() => expect(screen.getByLabelText('Saldo de la cuenta conjunta')).toHaveValue('900,00'));
+    expect(screen.queryByText('Transferencias del mes seleccionado')).not.toBeInTheDocument();
+  });
+  it('household switch clears the selected month and all entered balances', async () => {
     const user = userEvent.setup();
     const { refresh } = renderPage();
-    const originalDate = (await screen.findByLabelText('Fecha de cálculo')).value;
-    await user.clear(screen.getByLabelText('Saldo de la cuenta conjunta'));
-    await user.type(screen.getByLabelText('Saldo de la cuenta conjunta'), '1234');
-    await user.clear(screen.getByLabelText('Saldo personal de Pablo'));
+    await user.clear(await screen.findByLabelText('Saldo personal de Pablo'));
     await user.type(screen.getByLabelText('Saldo personal de Pablo'), '987');
-    await user.clear(screen.getByLabelText('Fecha de cálculo'));
-    await user.type(screen.getByLabelText('Fecha de cálculo'), '2025-01-01');
-    mocks.dashboard.mockResolvedValue({ balanceCents: 12000, accountSummary: { personal: [{ personId: 'person-2', balanceCents: 5000 }] }, budget: { contributions: [{ personId: 'person-2', personName: 'Ana' }], readiness: { ready: true }, recommendedBudgetCents: 100000 } });
-    mocks.plannings.mockResolvedValue([]);
+    fireEvent.change(screen.getByLabelText('Mes a financiar'), { target: { value: '2025-01' } });
+    mocks.dashboard.mockResolvedValue(forecast({ balanceCents: 12000 }));
     mocks.household.currentHousehold = { currency: 'EUR', id: 'household-2' };
     refresh();
     await waitFor(() => expect(screen.getByLabelText('Saldo de la cuenta conjunta')).toHaveValue('120,00'));
-    expect(screen.getByLabelText('Saldo personal de Ana')).toHaveValue('50,00');
-    expect(screen.queryByLabelText('Saldo personal de Pablo')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Fecha de cálculo')).toHaveValue(originalDate);
-    await user.click(screen.getByRole('button', { name: 'Confirmar saldos y calcular mes' }));
-    await waitFor(() => expect(mocks.prepareMonth).toHaveBeenCalledWith({ householdId: 'household-2', body: { calculationDate: originalDate, confirmedBalanceCents: 12000, confirmedPersonalBalances: [{ personId: 'person-2', balanceCents: 5000 }] } }));
+    expect(screen.getByLabelText('Saldo personal de Pablo')).toHaveValue('0,00');
+    expect(screen.getByLabelText('Mes a financiar')).toHaveValue('2026-11');
   });
-
-  it('una respuesta tardía del hogar anterior no muestra éxito ni refresca el hogar actual', async () => {
+  it('late response for a different month does not toast or refetch active forms', async () => {
     const user = userEvent.setup();
     let resolve;
     mocks.prepareMonth.mockReturnValue(new Promise((done) => { resolve = done; }));
-    const { invalidate, refresh } = renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Confirmar saldos y calcular mes' }));
+    const { invalidate } = renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Guardar previsión del mes' }));
     await waitFor(() => expect(mocks.prepareMonth).toHaveBeenCalledOnce());
-    mocks.household.currentHousehold = { currency: 'EUR', id: 'household-2' };
-    refresh();
-    expect(await screen.findByRole('button', { name: 'Confirmar saldos y calcular mes' })).toBeEnabled();
-    await act(async () => resolve({ id: 'saved-old-household' }));
+    fireEvent.change(screen.getByLabelText('Mes a financiar'), { target: { value: '2026-12' } });
+    expect(await screen.findByRole('button', { name: 'Guardar previsión del mes' })).toBeEnabled();
+    await act(async () => resolve({}));
     expect(mocks.success).not.toHaveBeenCalled();
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'], refetchType: 'none' });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['plannings', 'household-1'], refetchType: 'none' });
-    expect(invalidate.mock.calls.some(([options]) => options.queryKey[1] === 'household-2')).toBe(false);
+  });
+  it('supports explicit current-month links and hides personal confirmations for legacy identity', async () => {
+    mocks.dashboard.mockResolvedValue(forecast({ planning: planning({ personalHistoryRequiresConfirmation: true, contributions: [] }) }));
+    renderPage('/planificacion?mes=2026-10');
+    expect(await screen.findByText(/Sus datos originales se conservan, pero por privacidad/)).toBeVisible();
+    expect(mocks.dashboard).toHaveBeenCalledWith('household-1', '2026-10-01');
+    expect(screen.getByLabelText('Mes a financiar')).toHaveValue('2026-10');
+    expect(screen.queryByRole('button', { name: 'Confirmar mi aportación personal realizada' })).not.toBeInTheDocument();
   });
 });

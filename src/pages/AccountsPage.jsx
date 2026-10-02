@@ -37,6 +37,7 @@ export function AccountsPage() {
     <div className="space-y-8">
       <PageHeader eyebrow="Organización del dinero" title="Cuentas y saldos" />
       <AccountsSection
+        key={householdId}
         currency={householdState.currentHousehold.currency}
         householdId={householdId}
         people={peopleQuery.data?.people ?? []}

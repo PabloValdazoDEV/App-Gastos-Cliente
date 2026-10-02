@@ -2,41 +2,42 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChartNoAxesCombined, CheckCircle2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
 import { ContributionBreakdown } from '../features/finance/components/ContributionBreakdown';
+import { PlanningBudgetDetails } from '../features/finance/components/PlanningBudgetDetails';
+import { PlanningCorrections } from '../features/finance/components/PlanningCorrections';
+import { PlanningExtras } from '../features/finance/components/PlanningExtras';
+import { isPlanningMonth, nextPlanningMonth, planningMonthLabel } from '../features/finance/planningMonth';
 import { financeService } from '../features/finance/financeService';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
+import { todayIso } from './expensePageUtils';
 
-const today = () => new Date().toISOString().slice(0, 10);
 const formatBalanceInput = (cents) => ((cents ?? 0) / 100).toFixed(2).replace('.', ',');
 
-function HouseholdPlanning({ currentHousehold }) {
+function MonthPlanning({ currentHousehold, month }) {
   const householdId = currentHousehold.id;
   const mountedRef = useRef(true);
-  const [calculationDate, setCalculationDate] = useState(today);
+  const calculationDate = `${month}-01`;
   const [balance, setBalance] = useState('');
   const [personalBalances, setPersonalBalances] = useState({});
+  const [correctionActive, setCorrectionActive] = useState(false);
+  const [extraActive, setExtraActive] = useState(false);
   const queryClient = useQueryClient();
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
   function refresh(queryKey) {
-    queryClient.invalidateQueries({ queryKey, ...(mountedRef.current ? {} : { refetchType: 'none' }) });
+    return queryClient.invalidateQueries({ queryKey, ...(mountedRef.current ? {} : { refetchType: 'none' }) });
   }
   const dashboard = useQuery({
-    queryKey: ['dashboard', householdId, 'planning'],
-    queryFn: () => financeService.dashboard(householdId),
-    enabled: Boolean(householdId),
-  });
-  const plannings = useQuery({
-    queryKey: ['plannings', householdId],
-    queryFn: () => financeService.plannings(householdId),
+    queryKey: ['dashboard', householdId, 'planning', month],
+    queryFn: () => financeService.dashboard(householdId, calculationDate),
     enabled: Boolean(householdId),
   });
   const prepare = useMutation({
@@ -44,7 +45,7 @@ function HouseholdPlanning({ currentHousehold }) {
     onSuccess: () => {
       refresh(['dashboard', householdId]);
       refresh(['plannings', householdId]);
-      if (mountedRef.current) toast.success('Saldos del mes confirmados y cálculos actualizados.');
+      if (mountedRef.current) toast.success('Previsión del mes guardada. Sus aportaciones quedan fijadas.');
     },
   });
   const fund = useMutation({
@@ -52,8 +53,10 @@ function HouseholdPlanning({ currentHousehold }) {
     onSuccess: () => {
       refresh(['dashboard', householdId]);
       refresh(['plannings', householdId]);
-      if (mountedRef.current) toast.success('Mes marcado como financiado.');
+      refresh(['monthlyPlanning', householdId]);
+      if (mountedRef.current) toast.success('Aportación confirmada. No se ha movido dinero ni modificado el saldo bancario.');
     },
+    onError: (error) => { if (error.status === 409) refresh(['dashboard', householdId]); },
   });
   const closeRecovery = useMutation({
     mutationFn: financeService.updateRecovery,
@@ -85,8 +88,7 @@ function HouseholdPlanning({ currentHousehold }) {
 
   const data = dashboard.data;
   const currentPlanning = data.planning;
-  const latestPlanning = plannings.data?.[0];
-  const displayedPlanning = currentPlanning ?? latestPlanning;
+  const displayedPlanning = currentPlanning;
   const people = data.budget.contributions ?? [];
   const currency = currentHousehold.currency;
   const activeAdjustmentCents = data.activeRecoveryPlan?.monthlyAdjustmentCents ?? 0;
@@ -94,9 +96,6 @@ function HouseholdPlanning({ currentHousehold }) {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Planificación mensual"
-      />
       {displayedPlanning?.personalHistoryRequiresConfirmation ? <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950" role="status">Esta preparación antigua no guardaba la identidad vinculada a cada persona. Sus datos originales se conservan, pero por privacidad no mostramos su desglose ni sus saldos personales históricos. <Link className="inline-flex min-h-11 items-center font-bold underline focus-visible:outline-2 focus-visible:outline-focus" to="/cuentas">Actualiza tu saldo en Cuentas</Link>. El presupuesto actual sigue calculándose con tus gastos y compras.</p> : null}
 
       {!data.budget.readiness.ready ? (
@@ -107,22 +106,37 @@ function HouseholdPlanning({ currentHousehold }) {
           title="El presupuesto aún no está listo"
         />
       ) : currentPlanning ? (
-        <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-card sm:p-7" aria-labelledby="saldos-confirmados">
-          <h2 className="text-lg font-bold text-emerald-950" id="saldos-confirmados">Este mes ya está calculado</h2>
-          <p className="mt-2 text-sm leading-6 text-emerald-900">
-            Las aportaciones se calcularon con los saldos registrados al preparar el mes. Consulta en Inicio el presupuesto restante y su cobertura según los saldos actuales registrados.
+        <section className="min-w-0 rounded-2xl border border-border bg-surface p-4" aria-labelledby="saldos-confirmados">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-brand-strong" id="saldos-confirmados">
+            <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+            Previsión del mes guardada
+          </h2>
+          {currentPlanning.revision > 0 ? <p className="mt-1 text-xs text-text-muted">Revisión {currentPlanning.revision}</p> : null}
+          <p className="mt-1 text-sm leading-6 text-text-muted" role="status">
+            {currentPlanning.budgetChangedSincePreparation ? 'Hay cambios en los gastos; tus aportaciones guardadas se mantienen.' : 'Tus aportaciones guardadas se mantienen.'}
           </p>
-          {currentPlanning.budgetChangedSincePreparation ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950" role="status">El presupuesto ha cambiado desde que preparaste el mes. Las aportaciones que ves se han actualizado con las obligaciones actuales, incluidas las compras. Conservamos los saldos confirmados y el registro de preparación original; revisa si necesitas aportar la diferencia. No se mueve dinero automáticamente.</p> : null}
+          {currentPlanning.budgetChangedSincePreparation ? <details className="mt-2 border-t border-border">
+            <summary className="min-h-11 cursor-pointer content-center py-2 text-sm font-bold text-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">Ver cambios</summary>
+            <div className="space-y-2 pt-1 text-sm leading-6 text-text-muted">
+              <p>El presupuesto ha cambiado desde que guardaste esta previsión. {currentPlanning.revision > 0 ? 'Conservamos las aportaciones de la revisión guardada.' : 'Conservamos las aportaciones originales.'} Estas diferencias son para revisar, no nuevas transferencias confirmadas.</p>
+              {currentPlanning.budgetComparison ? <>
+                <p>Diferencia conjunta: {formatCents(currentPlanning.budgetComparison.householdDifferenceCents, currency)}. Diferencia personal: {currentPlanning.budgetComparison.personalDifferenceCents === null ? 'histórico no disponible' : formatCents(currentPlanning.budgetComparison.personalDifferenceCents, currency)}.</p>
+                {currentPlanning.extraFunding?.agreedCents > 0 ? <p>Los extras ya acordados aparecen aparte. Esta diferencia compara presupuestos, no indica lo que queda por transferir.</p> : null}
+                <ul className="mt-2 space-y-1">{currentPlanning.budgetComparison.lines.map((line) => <li className="break-words" key={line.id}>{line.name}: {formatCents(line.previousCents, currency)} → {formatCents(line.currentCents, currency)}</li>)}</ul>
+              </> : null}
+            </div>
+          </details> : null}
         </section>
       ) : (
         <section className="rounded-3xl border border-border bg-surface p-5 shadow-card sm:p-7" aria-labelledby="confirmar-saldos">
-          <h2 className="text-lg font-bold" id="confirmar-saldos">Confirmar saldos del mes</h2>
+          <h2 className="text-lg font-bold" id="confirmar-saldos">Preparar las transferencias de {planningMonthLabel(month)}</h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">
-            Confirma los saldos registrados de la cuenta conjunta y de cada cuenta personal para estimar las aportaciones del mes. Este cálculo prepara el mes: no representa el presupuesto que queda por utilizar ni una consulta a tu banco.
+            Revisa la previsión del día 1 al último día del mes que vas a financiar. Guarda el cálculo antes de confirmar las transferencias. No se consulta tu banco ni se mueve dinero.
           </p>
+          <p className="mt-2 text-sm leading-6 text-text-muted">Los saldos se registran como referencia de cobertura: no se descuentan automáticamente de esta aportación, porque pueden estar reservados para otros pagos o para el colchón. Las medias variables usan meses terminados; cuando faltan 3 días o menos para acabar el mes, también incluyen su gasto registrado como cierre estimado para preparar el siguiente.</p>
           <dl className="mt-5 grid gap-3 rounded-2xl bg-surface-muted p-4 sm:grid-cols-3">
             <div>
-              <dt className="text-xs font-semibold text-text-muted">Estándar mensual</dt>
+              <dt className="text-xs font-semibold text-text-muted">Previsión conjunta y tus gastos personales</dt>
               <dd className="mt-1 font-extrabold">{formatCents(data.budget.recommendedBudgetCents, currency)}</dd>
             </div>
             <div>
@@ -134,6 +148,12 @@ function HouseholdPlanning({ currentHousehold }) {
               <dd className="mt-1 font-extrabold">{formatCents(expectedTotalCents, currency)}</dd>
             </div>
           </dl>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {people.map((person) => <article className="min-w-0 rounded-2xl bg-surface-muted p-4" key={person.personId}>
+              <h3 className="break-words font-bold">{person.personName}</h3>
+              <ContributionBreakdown currency={currency} householdCents={person.standardHouseholdCents} personalCents={person.personalExpenseCents} personalAmountsHidden={person.personalAmountsHidden} totalCents={person.totalStandardCents} totalLabel="Previsión antes de guardar" pendingAdjustment={activeAdjustmentCents > 0} />
+            </article>)}
+          </div>
           <form
             className="mt-6 grid gap-4 sm:grid-cols-2"
             onSubmit={(event) => {
@@ -155,10 +175,6 @@ function HouseholdPlanning({ currentHousehold }) {
               }
             }}
           >
-            <div className="min-w-0">
-              <label className="text-sm font-bold" htmlFor="planning-date">Fecha de cálculo</label>
-              <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="planning-date" onChange={(event) => setCalculationDate(event.target.value)} required type="date" value={calculationDate} />
-            </div>
             <div>
               <label className="text-sm font-bold" htmlFor="planning-balance">Saldo de la cuenta conjunta</label>
               <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="planning-balance" inputMode="decimal" onChange={(event) => setBalance(event.target.value)} required value={balance} />
@@ -180,7 +196,7 @@ function HouseholdPlanning({ currentHousehold }) {
             ))}
             <div className="sm:col-span-2">
               <button className="min-h-12 rounded-xl bg-brand px-5 py-3 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60" disabled={prepare.isPending} type="submit">
-                {prepare.isPending ? 'Calculando…' : 'Confirmar saldos y calcular mes'}
+                {prepare.isPending ? 'Guardando…' : 'Guardar previsión del mes'}
               </button>
             </div>
             {prepare.isError ? <p className="text-sm text-red-700 sm:col-span-2" role="alert">{prepare.error.message}</p> : null}
@@ -193,7 +209,7 @@ function HouseholdPlanning({ currentHousehold }) {
           <div className="flex items-center gap-3">
             <CheckCircle2 className="size-6 text-brand" aria-hidden="true" />
             <div>
-              <h2 className="text-lg font-bold" id="ultima-planificacion">{currentPlanning ? 'Saldos del mes confirmados' : 'Último mes preparado'}</h2>
+              <h2 className="text-lg font-bold" id="ultima-planificacion">Transferencias del mes seleccionado</h2>
               <p className="text-sm text-text-muted">{displayedPlanning.month}/{displayedPlanning.year} · cálculo {isoDate(displayedPlanning.calculationDate)}</p>
             </div>
           </div>
@@ -201,36 +217,50 @@ function HouseholdPlanning({ currentHousehold }) {
             {displayedPlanning.contributions.map((item) => (
               <article
                 aria-label={`Aportación preparada de ${item.personName}`}
-                className="rounded-2xl border border-border bg-surface p-5"
+                className="min-w-0 rounded-2xl border border-border bg-surface p-5"
                 key={item.id}
               >
-                <p className="font-bold">{item.personName}</p>
+                <p className="break-words font-bold">{item.personName}</p>
                 <ContributionBreakdown
                   adjustmentCents={item.temporaryAdjustmentCents}
                   currency={currency}
                   householdCents={item.standardHouseholdCents}
                   personalCents={item.personalExpenseCents}
+                  personalAmountsHidden={item.personalAmountsHidden}
                   totalCents={item.totalRecommendedCents}
+                  totalLabel="Aportación prevista guardada"
                 />
+                <dl className="mt-3 space-y-2 border-t border-border pt-3 text-sm">
+                  {item.extraFunding?.agreedCents > 0 ? <div className="flex flex-wrap justify-between gap-2"><dt>Extra conjunto acordado</dt><dd className="font-bold">{formatCents(item.extraFunding.agreedCents, currency)}</dd></div> : null}
+                  <div className="flex flex-wrap justify-between gap-2"><dt>{item.personalAmountsHidden ? 'Confirmado conjunto' : 'Ya confirmado'}</dt><dd className="font-bold">{formatCents(item.totalConfirmedCents ?? item.funding?.confirmedCents ?? (displayedPlanning.fundingStatus === 'FUNDED' ? item.totalRecommendedCents : 0), currency)}</dd></div>
+                  <div className="flex flex-wrap justify-between gap-2"><dt>{item.personalAmountsHidden ? 'Pendiente conjunto' : 'Pendiente de aportar'}</dt><dd className="font-extrabold">{formatCents(item.totalPendingCents ?? item.funding?.pendingCents ?? (displayedPlanning.fundingStatus === 'FUNDED' ? 0 : item.totalRecommendedCents), currency)}</dd></div>
+                </dl>
+                {item.canConfirmPersonal && item.personalExpenseCents > 0 && !item.funding?.personalConfirmed ? <button className="mt-4 min-h-11 rounded-xl border border-border-strong px-4 text-sm font-bold text-brand-strong disabled:opacity-60" disabled={fund.isPending || correctionActive || extraActive} onClick={() => fund.mutate({ householdId, planningId: displayedPlanning.id, scope: 'PERSONAL', ...(displayedPlanning.stateVersion === undefined ? {} : { expectedVersion: displayedPlanning.stateVersion }) })} type="button">Confirmar mi aportación personal realizada</button> : null}
               </article>
             ))}
           </div>
-          {displayedPlanning.fundingStatus === 'PREPARED' ? (
+          {displayedPlanning.fundingStatus === 'PREPARED' && displayedPlanning.contributions.some((item) => !item.funding?.commonConfirmed && item.standardHouseholdCents + item.temporaryAdjustmentCents > 0) ? (
             <button
               className="mt-4 min-h-11 rounded-xl bg-brand px-4 font-bold text-on-brand disabled:opacity-60"
-              disabled={fund.isPending}
-              onClick={() => fund.mutate({ householdId, planningId: displayedPlanning.id })}
+              disabled={fund.isPending || correctionActive || extraActive}
+              onClick={() => fund.mutate({ householdId, planningId: displayedPlanning.id, scope: 'HOUSEHOLD', ...(displayedPlanning.stateVersion === undefined ? {} : { expectedVersion: displayedPlanning.stateVersion }) })}
               type="button"
             >
-              Confirmar fondos del mes
+              Confirmar todas las transferencias conjuntas realizadas
             </button>
-          ) : (
-            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-sm font-bold text-emerald-800">
-              <CheckCircle2 className="size-4" aria-hidden="true" /> Fondos del mes confirmados
+          ) : displayedPlanning.fundingStatus === 'FUNDED' ? (
+            <p className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold ${displayedPlanning.extraFunding?.pendingCents > 0 ? 'bg-amber-50 text-amber-950' : 'bg-emerald-100 text-emerald-800'}`}>
+              <CheckCircle2 className="size-4" aria-hidden="true" /> {displayedPlanning.extraFunding?.pendingCents > 0 ? 'Aportación inicial confirmada · Extras pendientes' : 'Fondos del mes confirmados'}
             </p>
-          )}
+          ) : <p className="mt-4 text-sm text-text-muted">Las transferencias conjuntas están cubiertas. Cada persona puede confirmar su aportación personal.</p>}
+          {fund.isError ? <p className="mt-3 text-sm text-red-700" role="alert">{fund.error.message}</p> : null}
+          <p className="mt-3 text-xs leading-5 text-text-muted">Esta confirmación registra solo la aportación prevista guardada, sin incluir extras. No hace transferencias ni suma otra vez ese dinero al saldo de las cuentas.</p>
+          <PlanningExtras currency={currency} disabled={fund.isPending || correctionActive} householdId={householdId} planning={displayedPlanning} onOpenChange={setExtraActive} onStale={() => refresh(['dashboard', householdId])} onSaved={() => Promise.all([refresh(['dashboard', householdId]), refresh(['plannings', householdId]), refresh(['monthlyPlanning', householdId])])} />
+          <PlanningCorrections currency={currency} disabled={fund.isPending || extraActive} householdId={householdId} planning={displayedPlanning} onOpenChange={setCorrectionActive} onStale={() => refresh(['dashboard', householdId])} onSaved={() => Promise.all([refresh(['dashboard', householdId]), refresh(['plannings', householdId]), refresh(['monthlyPlanning', householdId])])} />
         </section>
       ) : null}
+
+      <PlanningBudgetDetails currency={currency} lines={displayedPlanning ? displayedPlanning.budgetLines : data.budget.lines} />
 
       {data.activeRecoveryPlan ? (
         <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5" aria-labelledby="active-recovery">
@@ -250,6 +280,22 @@ function HouseholdPlanning({ currentHousehold }) {
       </Link>
     </div>
   );
+}
+
+function HouseholdPlanning({ currentHousehold }) {
+  const [params] = useSearchParams();
+  const [month, setMonth] = useState(() => isPlanningMonth(params.get('mes') ?? '') ? params.get('mes') : nextPlanningMonth(todayIso()));
+  const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).getUTCDate();
+  return <div className="space-y-6">
+    <PageHeader title="Planificación mensual" />
+    <section className="rounded-2xl border border-border bg-surface p-5">
+      <label className="block text-sm font-bold" htmlFor="planning-month">Mes a financiar</label>
+      <input className="mt-2 min-h-12 max-w-full rounded-xl border border-border-strong px-3" id="planning-month" max="2200-12" min="2000-01" onChange={(event) => { if (isPlanningMonth(event.target.value)) setMonth(event.target.value); }} type="month" value={month} />
+      <p className="mt-3 text-sm leading-6 text-text-muted">Previsión de {planningMonthLabel(month)}, del día 1 al {lastDay}. El sueldo cobrado a final del mes anterior financia este mes completo.</p>
+      <p className="mt-1 text-sm leading-6 text-text-muted">Cambiar el mes solo consulta otra previsión: no confirma ni modifica transferencias.</p>
+    </section>
+    <MonthPlanning currentHousehold={currentHousehold} key={month} month={month} />
+  </div>;
 }
 
 export function PlanningPage() {

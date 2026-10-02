@@ -45,6 +45,7 @@ const oneTimeSchema = z
     expenseDate: z.string().min(1, 'Indica la fecha del gasto.'),
     name: z.string().trim().min(1, 'Introduce un nombre.').max(120),
     notes: z.string().trim().max(2_000, 'Las notas son demasiado largas.').optional(),
+    paid: z.boolean(),
     personalPersonId: z.string().optional(),
     scope: z.enum(['HOUSEHOLD', 'PERSONAL']),
   })
@@ -76,9 +77,10 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
   useEffect(() => { onBusyChange(save.isPending); }, [onBusyChange, save.isPending]);
   useEffect(() => { formRef.current?.querySelector('input')?.focus({ preventScroll: true }); }, []);
   const {
-    formState: { errors },
+    formState: { dirtyFields, errors },
     handleSubmit,
     register,
+    setValue,
     watch,
   } = useForm({
     defaultValues: {
@@ -90,12 +92,18 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
       expenseDate: isoDate(initialExpense?.expenseDate) || todayIso(),
       name: initialExpense?.name ?? '',
       notes: initialExpense?.notes ?? '',
+      paid: initialExpense ? Boolean(initialExpense.paidAt) : true,
       personalPersonId: initialExpense?.personalPersonId ?? '',
       scope: initialExpense?.scope ?? 'HOUSEHOLD',
     },
     resolver: zodResolver(oneTimeSchema),
   });
   const scope = watch('scope');
+  const expenseDate = watch('expenseDate');
+  useEffect(() => {
+    if (initialExpense || !expenseDate || dirtyFields.paid) return;
+    setValue('paid', expenseDate <= todayIso(), { shouldDirty: false });
+  }, [dirtyFields.paid, expenseDate, initialExpense, setValue]);
   const onSubmit = handleSubmit(async (values) => {
     if (save.isPending) return;
     try {
@@ -109,6 +117,11 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
           expenseDate: values.expenseDate,
           name: values.name.trim(),
           notes: values.notes || null,
+          paymentDate: values.paid
+            ? initialExpense?.paidAt && values.paid === Boolean(initialExpense.paidAt)
+              ? isoDate(initialExpense.paidAt)
+              : todayIso()
+            : null,
           personalPersonId: values.scope === 'PERSONAL' ? values.personalPersonId : null,
           scope: values.scope,
         },
@@ -152,6 +165,14 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
               {...register('expenseDate')}
             />
           </div>
+          <fieldset className="rounded-xl border border-border bg-surface-muted p-4">
+            <legend className="px-1 text-sm font-bold text-text">Estado del gasto</legend>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-text">
+              <input aria-describedby="one-time-paid-help" className="size-4 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" type="checkbox" {...register('paid')} />
+              Ya está pagado
+            </label>
+            <p className="mt-1 text-xs leading-5 text-text-muted" id="one-time-paid-help">Marcado por defecto para gastos con fecha de hoy o anterior. Si aún está pendiente, desmárcalo.</p>
+          </fieldset>
           <fieldset>
             <legend className="text-sm font-bold text-text">¿A quién corresponde?</legend>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -338,8 +359,8 @@ export function OneTimeExpensesPage() {
                 renderItem={(expense) => (
                   <li className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-card" key={expense.id}>
                     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h5 className="break-words font-extrabold text-text">{expense.name}</h5><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
-                      <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => openForm(expense.id)} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
+                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="break-words font-extrabold text-text">{expense.name}</h3><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
+                      <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><p className="mt-1 text-xs font-semibold text-text-muted">{expense.paidAt ? 'Pagado' : 'Pendiente de confirmar'}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => { setEditingId(expense.id); setShowForm(true); }} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
                     </div>
                   </li>
                 )}

@@ -77,7 +77,7 @@ export const queryKeys = Object.freeze({
       period,
     ],
   },
-  calendar: (householdId, period) => ['calendar', householdId, period],
+  calendar: (householdId, period, anchorDate) => ['calendar', householdId, period, ...(anchorDate ? [anchorDate] : [])],
   purchases: {
     all: (householdId) => ['purchases', householdId],
     detail: (householdId, purchaseId) => ['purchases', householdId, 'detail', purchaseId],
