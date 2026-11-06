@@ -56,6 +56,16 @@ import {
   positiveMoneyInputSchema,
   todayIso,
 } from './expensePageUtils';
+import { startsWithNewForm } from '../features/finance/startsWithNewForm';
+import { MoreInfo } from '../components/ui/MoreInfo';
+
+// Without an explicit start date the expense starts at its next payment, or
+// today if that payment is already overdue: never after the next payment.
+function effectiveStartDate(values) {
+  if (values.startDate) return values.startDate;
+  const today = todayIso();
+  return values.nextDueDate && values.nextDueDate < today ? values.nextDueDate : today;
+}
 
 const recurringSchema = z
   .object({
@@ -67,8 +77,9 @@ const recurringSchema = z
     frequency: z.enum(expenseFrequencies),
     intervalMonths: z.string().optional(),
     intervalWeeks: z.string().optional(),
-    startDate: z.string().min(1, 'Indica la fecha de inicio.'),
-    nextDueDate: z.string().min(1, 'Indica el próximo vencimiento.'),
+    // Optional: when empty it is derived from the next payment (see effectiveStartDate).
+    startDate: z.string().optional(),
+    nextDueDate: z.string().min(1, 'Indica cuándo toca el próximo pago.'),
     endDate: z.string().optional(),
     marginMode: z.enum(['GENERAL', 'SPECIFIC']),
     safetyMargin: z.string().optional(),
@@ -101,18 +112,18 @@ const recurringSchema = z
         path: ['intervalWeeks'],
       });
     }
-    if (values.endDate && values.endDate < values.startDate) {
+    if (values.endDate && values.nextDueDate && values.endDate < values.nextDueDate) {
       context.addIssue({
         code: 'custom',
-        message: 'La fecha final no puede ser anterior a la inicial.',
+        message: 'El último pago no puede ser anterior al próximo pago.',
         path: ['endDate'],
       });
     }
-    if (values.nextDueDate && values.nextDueDate < values.startDate) {
+    if (values.startDate && values.nextDueDate && values.nextDueDate < values.startDate) {
       context.addIssue({
         code: 'custom',
-        message: 'El próximo vencimiento no puede ser anterior al inicio.',
-        path: ['nextDueDate'],
+        message: 'El próximo pago no puede ser anterior a la fecha de inicio.',
+        path: ['startDate'],
       });
     }
     if (values.marginMode === 'SPECIFIC' && !values.withoutMargin) {
@@ -190,7 +201,7 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
       remindersEnabled: initialExpense?.remindersEnabled ?? true,
       safetyMargin: bpsForInput(initialExpense?.safetyMarginOverrideBps),
       scope: initialExpense?.scope ?? 'HOUSEHOLD',
-      startDate: isoDate(initialExpense?.startDate) || todayIso(),
+      startDate: isoDate(initialExpense?.startDate),
       withoutMargin: initialExpense?.safetyMarginOverrideBps === 0,
     },
     resolver: zodResolver(recurringSchema),
@@ -210,6 +221,16 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
   });
   const marginMode = watch('marginMode');
   const withoutMargin = watch('withoutMargin');
+  // Rarely needed fields live under "Más opciones"; they open by themselves
+  // when the expense already uses them or one of them has an error.
+  const [moreOptions, setMoreOptions] = useState(() => Boolean(
+    initialExpense?.endDate ||
+    initialExpense?.notes ||
+    Number.isInteger(initialExpense?.safetyMarginOverrideBps),
+  ));
+  const showMoreOptions = moreOptions || Boolean(
+    errors.startDate || errors.endDate || errors.safetyMargin || errors.notes,
+  );
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -237,7 +258,7 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
               ? marginInputToBps(values.safetyMargin)
               : null,
           scope: values.scope,
-          startDate: values.startDate,
+          startDate: effectiveStartDate(values),
         },
       });
     } catch {
@@ -361,35 +382,53 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
             </SelectField>
           ) : null}
 
+          <FormField
+            error={errors.nextDueDate?.message}
+            help="Cuándo toca pagarlo la próxima vez. Puede ser una fecha ya pasada si aún no lo has pagado."
+            label="Próximo pago"
+            type="date"
+            {...register('nextDueDate')}
+          />
+
+          <label className="flex min-h-11 items-center gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm font-semibold text-text">
+            <input className="size-4 accent-brand" type="checkbox" {...register('remindersEnabled')} />
+            Avisarme antes de cada pago
+          </label>
+
+          <button
+            aria-controls="recurring-more-options"
+            aria-expanded={showMoreOptions}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 text-sm font-bold text-brand-strong hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            onClick={() => setMoreOptions((open) => !open)}
+            type="button"
+          >
+            {showMoreOptions ? 'Ocultar opciones' : 'Más opciones'}
+            <span className="font-normal text-text-muted">(último pago, margen, notas)</span>
+          </button>
+
+          <div className="space-y-5" hidden={!showMoreOptions} id="recurring-more-options">
           <div className="date-fields-grid grid min-w-0 gap-5">
             <FormField
-              error={errors.startDate?.message}
-              help="El día en que empezó este gasto. Por ejemplo, cuando comenzó tu contrato de alquiler."
-              label="Fecha de inicio"
-              type="date"
-              {...register('startDate')}
-            />
-            <FormField
-              error={errors.nextDueDate?.message}
-              help="La fecha del siguiente pago que tienes que hacer."
-              label="Próximo vencimiento"
-              type="date"
-              {...register('nextDueDate')}
-            />
-            <FormField
               error={errors.endDate?.message}
-              help="La fecha del último pago. Si el gasto seguirá activo, déjala vacía."
-              label="Fecha final (opcional)"
+              help="Solo si tiene final, como un préstamo o una financiación. Si no, déjala vacía."
+              label="Último pago (opcional)"
               type="date"
               {...register('endDate')}
+            />
+            <FormField
+              error={errors.startDate?.message}
+              help="Cuándo empezó este gasto. Si la dejas vacía, usamos el próximo pago."
+              label="Fecha de inicio (opcional)"
+              type="date"
+              {...register('startDate')}
             />
           </div>
 
           <fieldset>
             <legend className="text-sm font-bold text-text">Margen de seguridad</legend>
-            <p className="mt-1 text-xs leading-5 text-text-muted">
+            <MoreInfo className="mt-1">
               El margen propio del gasto tiene prioridad sobre el de su categoría y el general.
-            </p>
+            </MoreInfo>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               {[
                 ['GENERAL', 'Heredar margen', 'Usa la categoría o el margen general.'],
@@ -435,11 +474,6 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
             </span>
           </label>
 
-          <label className="flex min-h-11 items-center gap-3 rounded-xl bg-surface-muted px-3.5 py-3 text-sm font-semibold text-text">
-            <input className="size-4 accent-brand" type="checkbox" {...register('remindersEnabled')} />
-            Activar recordatorios de vencimiento
-          </label>
-
           <TextareaField
             error={errors.notes?.message}
             label="Notas (opcional)"
@@ -447,6 +481,7 @@ function RecurringForm({ categories, householdId, initialExpense = null, onClose
             placeholder="Información útil para reconocer este gasto"
             {...register('notes')}
           />
+          </div>
           <AuthError error={saveExpense.error} />
           <SubmitButton isPending={saveExpense.isPending} pendingLabel="Guardando gasto…">
             {isEditing ? 'Guardar cambios' : 'Guardar gasto recurrente'}
@@ -465,7 +500,7 @@ export function RecurringExpensesPage() {
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
   const purchases = useLinkedPurchaseExpenses(householdId);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(startsWithNewForm);
   const [paymentSelection, setPaymentSelection] = useState(null);
   const paymentSelectionRef = useRef(null);
   const paymentExpenseId = paymentSelection?.expenseId ?? null;
@@ -706,7 +741,7 @@ export function RecurringExpensesPage() {
                             : 'Gasto común'}
                         </p>
                         <p className="mt-2 text-sm font-semibold text-text">
-                          Próximo: {formatCivilDate(expense.nextDueDate)}
+                          Próximo pago: {formatCivilDate(expense.nextDueDate)}
                         </p>
                         {isLinkedExpense ? (
                           <p className="mt-2 text-xs font-bold uppercase tracking-wide text-brand-strong">
@@ -738,7 +773,7 @@ export function RecurringExpensesPage() {
                           type="button"
                         >
                           <CheckCircle2 aria-hidden="true" className="size-4" />
-                          Registrar pago
+                          Marcar como pagado
                         </button>
                         <button
                           className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"

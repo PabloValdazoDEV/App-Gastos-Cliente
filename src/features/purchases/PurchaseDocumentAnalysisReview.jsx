@@ -8,6 +8,7 @@ import { FormField } from '../auth/components/FormField';
 import { formatCents } from '../finance/money';
 import { focusPurchaseFormError, MAX_PURCHASE_ITEMS } from './purchaseFormState';
 import { analysisItemDefaults, analysisReviewDefaults, analysisReviewMismatch, analysisReviewPayload, analysisReviewSchema, analysisTotalProtected } from './purchaseAnalysisReviewState';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 function CheckField({ label, help, error, ...props }) {
   const id = useId();
@@ -44,7 +45,7 @@ export function PurchaseDocumentAnalysisReview({ analysis, purchase, currency = 
   }, () => requestAnimationFrame(() => focusPurchaseFormError(formRef.current)));
 
   return <form aria-busy={pending} aria-label="Revisar datos detectados" className="min-w-0 space-y-6 [overflow-wrap:anywhere]" noValidate onSubmit={submit} ref={formRef}>
-    <div><h3 className="text-xl font-extrabold">Revisar datos detectados</h3><p className="mt-2 text-sm leading-6 text-text-muted">Comprueba la información antes de guardarla. La IA puede cometer errores.</p><p className="mt-1 text-xs leading-5 text-text-muted">El documento original se conserva. Nada se aplica a la compra hasta pulsar «Confirmar datos».</p></div>
+    <div><h3 className="text-xl font-extrabold">Revisar datos detectados</h3><p className="mt-2 text-sm leading-6 text-text-muted">Comprueba la información antes de guardarla. La IA puede cometer errores.</p><MoreInfo className="mt-1">El documento original se conserva. Nada se aplica a la compra hasta pulsar «Confirmar datos».</MoreInfo></div>
     {data.warnings?.length ? <div className="min-w-0 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">Revisa estas observaciones</p><ul className="mt-2 list-disc space-y-1 pl-5">{data.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div> : null}
     <fieldset className="min-w-0 space-y-4" disabled={pending || disabled}>
       <legend className="mb-3 text-lg font-bold">Compra</legend>
@@ -75,6 +76,6 @@ export function PurchaseDocumentAnalysisReview({ analysis, purchase, currency = 
     {mismatch ? <div className="min-w-0 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950"><p className="text-sm font-semibold" role="status">El total detectado no coincide con la suma de los productos. Revísalo antes de guardar.</p><CheckField disabled={pending || disabled} error={errors.acknowledgeTotalMismatch?.message} label="He revisado la diferencia y quiero guardar estos datos" {...register('acknowledgeTotalMismatch')} /></div> : null}
     <AuthError error={error} />
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row"><div className="min-w-0 sm:flex-1"><SubmitButton disabled={isStale || disabled} isPending={pending} pendingLabel="Confirmando datos…">Confirmar datos</SubmitButton></div><button className={actionClass} disabled={pending || disabled} onClick={onCancel} type="button">Cancelar revisión</button></div>
-    <p className="text-xs leading-5 text-text-muted">Cancelar descarta solo los cambios de esta revisión. El análisis guardado y el documento original se conservan.</p>
+    <MoreInfo>Cancelar descarta solo los cambios de esta revisión. El análisis guardado y el documento original se conservan.</MoreInfo>
   </form>;
 }

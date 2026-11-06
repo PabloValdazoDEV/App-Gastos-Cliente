@@ -1,25 +1,30 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { ExpensesPage } from './ExpensesPage';
 
-describe('ExpensesPage', () => {
-  it('conserva las cuatro tarjetas completas como enlaces en orden y accesibles por teclado', async () => {
-    const user = userEvent.setup();
+describe('ExpensesPage: ¿qué quieres apuntar?', () => {
+  it('muestra los cinco tipos con ejemplos y un acceso directo para añadir y otro para ver la lista', () => {
     render(<MemoryRouter><ExpensesPage /></MemoryRouter>);
-    const links = screen.getAllByRole('link');
+    expect(screen.getByRole('heading', { name: '¿Qué quieres apuntar?' })).toBeInTheDocument();
+
     const expected = [
-      ['Recurrentes', '/gastos/recurrentes'], ['Facturas', '/facturas'],
-      ['Variables', '/gastos/variables'], ['Puntuales', '/gastos/puntuales'],
+      ['Variable', /Súper/, '/gastos/variables'],
+      ['Recurrente', /Alquiler/, '/gastos/recurrentes'],
+      ['Factura', /Luz/, '/facturas'],
+      ['Puntual', /Dentista/, '/gastos/puntuales'],
+      ['Compra', /Electrodoméstico/, '/compras'],
     ];
-    expect(links).toHaveLength(4);
-    for (const [index, [label, path]] of expected.entries()) {
-      expect(links[index]).toHaveTextContent(label);
-      expect(links[index]).toHaveAttribute('href', path);
-      await user.tab();
-      expect(links[index]).toHaveFocus();
-    }
+    const items = within(screen.getByRole('list', { name: 'Tipos de gasto' })).getAllByRole('listitem');
+    expect(items).toHaveLength(expected.length);
+
+    expected.forEach(([title, example, path], index) => {
+      const item = within(items[index]);
+      expect(item.getByRole('heading', { name: title })).toBeInTheDocument();
+      expect(item.getByText(example)).toBeVisible();
+      expect(item.getByRole('link', { name: `Añadir ${title.toLowerCase()}` })).toHaveAttribute('href', `${path}?nuevo=1`);
+      expect(item.getByRole('link', { name: /^Ver / })).toHaveAttribute('href', path);
+    });
   });
 });

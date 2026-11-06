@@ -1,5 +1,6 @@
 import { formatCents } from '../money';
 import { planningMonthLabel } from '../planningMonth';
+import { MoreInfo } from '../../../components/ui/MoreInfo';
 
 const labels = { RECURRING: 'Gasto periódico · previsión mensual', INVOICE: 'Previsión de facturas', VARIABLE: 'Previsión de gasto variable', ONE_TIME: 'Extraordinario del mes', PURCHASE: 'Compra o cuota del mes' };
 
@@ -8,7 +9,7 @@ export function PlanningBudgetDetails({ lines = [], currency }) {
   return (
     <details className="rounded-2xl border border-border bg-surface p-5">
       <summary className="min-h-11 cursor-pointer content-center font-bold focus-visible:outline-2 focus-visible:outline-focus">Desglose de la previsión</summary>
-      <p className="mt-2 text-sm leading-6 text-text-muted">Incluye la provisión mensual de los gastos periódicos, no necesariamente su recibo completo. Los extraordinarios pertenecen solo al mes seleccionado. Solo se muestran tus gastos personales y los comunes.</p>
+      <MoreInfo className="mt-2">Incluye la provisión mensual de los gastos periódicos, no necesariamente su recibo completo. Los extraordinarios pertenecen solo al mes seleccionado. Solo se muestran tus gastos personales y los comunes.</MoreInfo>
       <ul className="mt-4 divide-y divide-border">
         {lines.map((line) => (
           <li className="flex flex-wrap items-start justify-between gap-2 py-3" key={`${line.type}:${line.id}`}>

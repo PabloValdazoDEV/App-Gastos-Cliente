@@ -162,4 +162,32 @@ describe('SimulatorPage', () => {
       }),
     );
   });
+
+  it('no permite crear un plan real a partir de un saldo hipotético', async () => {
+    const user = userEvent.setup();
+    mocks.simulation.mockResolvedValue({
+      deficitCents: 15_000,
+      financialStatus: 'DEFICIT',
+      monthlyStandardBudgetCents: 100_000,
+      readiness: { ready: true },
+      relevantAvailableBalanceCents: 30_000,
+      reserveLines: [],
+      simulationDate: '2026-09-10',
+      theoreticalReserveCents: 45_000,
+      upcomingPayments: [],
+    });
+    renderPage();
+
+    await screen.findByRole('button', { name: 'Aplicar ajuste mensual' });
+    await user.type(screen.getByLabelText('Saldo alternativo (opcional)'), '100');
+    await user.click(screen.getByRole('button', { name: 'Actualizar simulación' }));
+
+    expect(await screen.findByText(/usa un saldo alternativo/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aplicar ajuste mensual' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ajustar todo este mes' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Simular con mis datos reales' }));
+    expect(await screen.findByRole('button', { name: 'Aplicar ajuste mensual' })).toBeInTheDocument();
+    expect(mocks.createRecovery).not.toHaveBeenCalled();
+  });
 });

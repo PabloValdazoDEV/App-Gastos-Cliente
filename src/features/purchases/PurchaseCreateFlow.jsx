@@ -8,6 +8,7 @@ import { purchaseDraftsService } from './purchaseDraftsService';
 import { PURCHASE_DOCUMENT_ACCEPT, validatePurchaseDocumentFile } from './purchaseDocumentSchema';
 import { purchaseIntakeHints, purchaseIntakeValues } from './purchaseIntakeState';
 import { purchasesService } from './purchasesService';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 const button = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-border-strong px-4 py-2.5 text-sm font-bold hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60 disabled:cursor-not-allowed';
 const primary = `${button} border-brand bg-brand text-on-brand hover:bg-brand-hover`;
@@ -77,7 +78,7 @@ export function PurchaseCreateFlow({ householdId, currency, timezone, people, on
     <p aria-label="Progreso de la compra" className="text-xs font-bold uppercase tracking-wide text-brand-strong">{stage === 'SOURCE' ? 'Paso 1 · Archivo o entrada manual' : stage === 'REVIEW' ? 'Paso 2 de 3 · Análisis y selección' : draft ? 'Paso 3 de 3 · Confirmación' : 'Paso 2 de 2 · Confirmación'}</p>
     <h3 className="text-lg font-extrabold outline-none" ref={heading} tabIndex={-1}>{stage === 'SOURCE' ? 'Empieza por el ticket' : stage === 'REVIEW' ? 'Revisa el archivo' : 'Revisa y guarda tu compra'}</h3>
     {stage === 'SOURCE' ? <>
-      <p className="text-sm leading-6 text-text-muted">Una compra, un producto. Sube una foto o PDF y utiliza la IA para rellenar los datos, o introdúcelos a mano.</p>
+      <MoreInfo>Una compra, un producto. Sube una foto o PDF y utiliza la IA para rellenar los datos, o introdúcelos a mano.</MoreInfo>
       <div className="space-y-3 rounded-2xl border border-dashed border-border-strong bg-surface-muted p-5">
         <label className="block text-sm font-bold" htmlFor={`${id}-file`}>Subir ticket o factura</label>
         <input accept={PURCHASE_DOCUMENT_ACCEPT} aria-describedby={`${id}-help`} className="block min-h-12 w-full min-w-0 rounded-xl text-sm file:mr-3 file:min-h-11 file:rounded-xl file:border-0 file:bg-brand file:px-4 file:font-bold file:text-on-brand focus-visible:outline-2 focus-visible:outline-focus" disabled={operation.isPending} id={`${id}-file`} type="file" onChange={(event) => {
@@ -87,7 +88,7 @@ export function PurchaseCreateFlow({ householdId, currency, timezone, people, on
           if (failure) { setFileError(failure); return; }
           void run(() => purchaseDraftsService.upload({ householdId, file }), setSource);
         }} />
-        <p className="text-xs leading-5 text-text-muted" id={`${id}-help`}>PDF, JPEG, PNG o WebP · Máximo 10 MB. El borrador es privado y caduca en 24 horas. Todavía no se crea ninguna compra ni gasto.</p>
+        <MoreInfo>PDF, JPEG, PNG o WebP · Máximo 10 MB. El borrador es privado y caduca en 24 horas. Todavía no se crea ninguna compra ni gasto.</MoreInfo>
       </div>
       <button className={button} disabled={operation.isPending} onClick={() => startForm(false)} type="button">Introducir sin archivo</button>
       {drafts.isError ? <p className="text-sm text-text-muted">No se han podido cargar tus borradores. <button className={button} onClick={() => drafts.refetch()} type="button">Reintentar</button></p> : null}

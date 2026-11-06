@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('react-hot-toast', () => ({ default: { success: mocks.success, error: vi.fn() } }));
 vi.mock('../features/finance/financeService', () => ({ financeService: mocks }));
 vi.mock('../features/households/useHousehold', () => ({ useHousehold: () => mocks.household }));
-vi.mock('./expensePageUtils', () => ({ todayIso: () => '2026-10-29' }));
+vi.mock('./expensePageUtils', async (importOriginal) => ({ ...(await importOriginal()), todayIso: () => '2026-10-29' }));
 import { PlanningPage } from './PlanningPage';
 
 function forecast(overrides = {}) {
@@ -66,7 +66,7 @@ describe('PlanningPage salary month forecast', () => {
         confirmedPersonalBalances: [{ personId: 'person-1', balanceCents: 0 }] },
     }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] });
-    expect(screen.getByText(/no se descuentan automáticamente/)).toBeVisible();
+    expect(screen.getByText(/no se descuentan automáticamente/)).toBeInTheDocument();
   });
   it('shows extraordinary expenses and their included margin in the breakdown', async () => {
     const user = userEvent.setup();

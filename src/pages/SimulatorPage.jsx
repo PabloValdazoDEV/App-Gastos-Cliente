@@ -9,11 +9,11 @@ import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { financeService } from '../features/finance/financeService';
-import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
+import { eurosInputToCents, formatCents } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
 import { useHouseholdDraftGuard } from '../features/households/useHouseholdDraftGuard';
 import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
-import { todayIso } from './expensePageUtils';
+import { formatCivilDate, todayIso } from './expensePageUtils';
 
 const today = todayIso;
 
@@ -102,6 +102,14 @@ function HouseholdSimulator({ currentHousehold }) {
     data.monthlyStandardBudgetCents + immediateContributionCents;
   const balanceAfterImmediateContributionCents =
     data.relevantAvailableBalanceCents + immediateContributionCents;
+  // A real recovery plan can only come from today's date and the real balance.
+  const isHypothetical = appliedDate !== initialDate || appliedBalance !== undefined;
+  function resetToRealData() {
+    setDate(initialDate);
+    setAppliedDate(initialDate);
+    setBalance('');
+    setAppliedBalance(undefined);
+  }
   const recoveryBody = () => ({
     deficitCents: data.deficitCents,
     mode,
@@ -196,7 +204,7 @@ function HouseholdSimulator({ currentHousehold }) {
                   <div>
                     <p className="font-bold">{payment.name}</p>
                     <p className="mt-1 text-xs text-text-muted">
-                      {isoDate(payment.dueDate)} · {remainingDaysLabel(payment.daysRemaining)}
+                      Vence el {formatCivilDate(payment.dueDate)} · {remainingDaysLabel(payment.daysRemaining)}
                     </p>
                   </div>
                   <p className="shrink-0 font-extrabold">{formatCents(payment.amountCents, currency)}</p>
@@ -228,7 +236,7 @@ function HouseholdSimulator({ currentHousehold }) {
                   <div>
                     <p className="font-bold">{line.name}</p>
                     <p className="mt-1 text-xs text-text-muted">
-                      Vence {isoDate(line.dueDate)} · {remainingDaysLabel(line.daysRemaining, line.overdue)}
+                      Vence el {formatCivilDate(line.dueDate)} · {remainingDaysLabel(line.daysRemaining, line.overdue)}
                     </p>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-5 gap-y-1 text-sm sm:text-right">
@@ -277,6 +285,21 @@ function HouseholdSimulator({ currentHousehold }) {
               Este cálculo es informativo: no crea ni registra una aportación.
             </p>
           </article>
+          {isHypothetical ? (
+            <div className="mt-6 rounded-2xl border border-red-200 bg-white p-5 text-red-950">
+              <h3 className="text-base font-extrabold">Aplicar un ajuste temporal</h3>
+              <p className="mt-1 text-sm leading-6 text-red-900">
+                Esta simulación usa {appliedBalance !== undefined && appliedDate !== initialDate ? 'otra fecha y otro saldo' : appliedBalance !== undefined ? 'un saldo alternativo' : 'otra fecha'}. Un ajuste real solo puede calcularse con la fecha de hoy y vuestro saldo real, para no cobrar de más ni de menos.
+              </p>
+              <button
+                className="mt-4 min-h-12 rounded-xl border border-red-300 bg-white px-5 font-bold text-red-950 hover:bg-red-100"
+                onClick={resetToRealData}
+                type="button"
+              >
+                Simular con mis datos reales
+              </button>
+            </div>
+          ) : <>
           <div className="mt-6">
             <h3 className="text-base font-extrabold text-red-950">Aplicar un ajuste temporal</h3>
             <p className="mt-1 text-sm leading-6 text-red-900">
@@ -344,6 +367,7 @@ function HouseholdSimulator({ currentHousehold }) {
             </button>
           </div>
           {createRecovery.isError ? <p className="mt-3 text-sm text-red-800" role="alert">{createRecovery.error.message}</p> : null}
+          </>}
         </section>
       ) : null}
     </div>

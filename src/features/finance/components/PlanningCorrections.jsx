@@ -5,6 +5,7 @@ import { useHouseholdDraftGuard } from '../../households/useHouseholdDraftGuard'
 import { financeService } from '../financeService';
 import { formatCents } from '../money';
 import { ContributionBreakdown } from './ContributionBreakdown';
+import { MoreInfo } from '../../../components/ui/MoreInfo';
 
 const secondary = 'min-h-12 rounded-xl border border-border-strong px-4 py-2 text-sm font-bold text-brand-strong disabled:opacity-60';
 
@@ -59,9 +60,9 @@ export function PlanningCorrections({ householdId, planning, currency, onSaved, 
   if (planning.stateVersion === undefined) return null;
   return <section className="mt-5 min-w-0 rounded-2xl border border-border bg-surface p-4 sm:p-5" aria-labelledby="planning-corrections" ref={sectionRef}>
     <h3 className="font-bold" id="planning-corrections">Corregir esta previsión</h3>
-    <p className="mt-2 text-sm leading-6 text-text-muted">Las correcciones conservan el histórico. No hacen ni devuelven transferencias, y no cambian los saldos de Cuentas.</p>
+    <MoreInfo className="mt-2">Las correcciones conservan el histórico. No hacen ni devuelven transferencias, y no cambian los saldos de Cuentas.</MoreInfo>
     {!action ? <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-      {planning.canRevise ? <button className={secondary} disabled={pending} onClick={() => open('REVISION')} type="button">Revisar importes antes de aportar</button> : <p className="text-sm leading-6 text-text-muted">No se recalcula una previsión con dinero ya confirmado, extras acordados o sin identidad histórica verificable. Deshaz una confirmación solo si fue un error.</p>}
+      {planning.canRevise ? <button className={secondary} disabled={pending} onClick={() => open('REVISION')} type="button">Revisar importes antes de aportar</button> : <MoreInfo>No se recalcula una previsión con dinero ya confirmado, extras acordados o sin identidad histórica verificable. Deshaz una confirmación solo si fue un error.</MoreInfo>}
       {commonConfirmed ? <button className={secondary} disabled={pending} onClick={() => open('HOUSEHOLD')} type="button">Corregir confirmación conjunta</button> : null}
       {personalConfirmed ? <button className={secondary} disabled={pending} onClick={() => open('PERSONAL')} type="button">Corregir mi confirmación personal</button> : null}
     </div> : <form className="mt-4 space-y-4" onSubmit={submit}>

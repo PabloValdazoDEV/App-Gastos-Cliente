@@ -10,6 +10,7 @@ import { PurchaseDocumentForm } from './PurchaseDocumentForm';
 import { PurchaseDocumentAnalysisPanel } from './PurchaseDocumentAnalysisPanel';
 import { PURCHASE_DOCUMENT_TYPES, formatDocumentSize } from './purchaseDocumentSchema';
 import { purchaseDocumentsService } from './purchaseDocumentsService';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 const secondaryButton = 'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
 const downloadLifetimeMs = 60_000;
@@ -156,7 +157,7 @@ function DocumentsContent({ householdId, purchase, currency, disabled, onBusyCha
         <h2 className="rounded-lg text-xl font-extrabold focus:outline-2 focus:outline-focus" id={titleId} ref={headingRef} tabIndex={-1}>Documentos{documentsQuery.isSuccess ? ` (${documents.length})` : ''}</h2>
         <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-extrabold text-on-brand hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60" data-document-trigger="add" disabled={Boolean(form) || busy || documentsQuery.isError} onClick={() => startForm()} type="button"><Plus aria-hidden="true" className="size-4 shrink-0" />Añadir documento</button>
       </div>
-      <p className="text-sm leading-6 text-text-muted">Tickets, facturas y garantías privados. Solo pueden acceder quienes pueden ver esta compra. Guardarlos no modifica el presupuesto ni los saldos.</p>
+      <MoreInfo>Tickets, facturas y garantías privados. Solo pueden acceder quienes pueden ver esta compra. Guardarlos no modifica el presupuesto ni los saldos.</MoreInfo>
       {documentsQuery.isPending ? <p aria-live="polite" className="text-sm font-semibold text-text-muted" role="status">Cargando documentos…</p> : null}
       {documentsQuery.isError ? <ErrorState title="No se han podido cargar los documentos" description={documentsQuery.error.message} onRetry={documentsQuery.refetch} /> : null}
       {success ? <SuccessNotice title={success} /> : null}

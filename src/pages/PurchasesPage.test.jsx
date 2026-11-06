@@ -39,7 +39,8 @@ describe('PurchasesPage', () => {
     expect(await screen.findByRole('heading', { name: 'Todavía no has guardado ninguna compra' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: 'Añadir compra' })).toHaveLength(1);
     expect(screen.queryByText(/IA|OCR|documentos|financiación/)).not.toBeInTheDocument();
-    expect(screen.getByText(/El presupuesto recoge los pagos de cada mes/)).toBeVisible();
+    // Secondary explanation: present but folded under "Ver más".
+    expect(screen.getByText(/El presupuesto recoge los pagos de cada mes/)).toBeInTheDocument();
   });
 
   it('muestra carga sin inventar compras', () => {

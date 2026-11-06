@@ -20,13 +20,14 @@ import { purchasesService } from '../features/purchases/purchasesService';
 import { PurchaseWarrantySummary } from '../features/purchases/WarrantyStatus';
 import { FormCard } from './expensePageShared';
 import { peopleFrom } from './expensePageUtils';
+import { startsWithNewForm } from '../features/finance/startsWithNewForm';
 
 function PurchasesContent({ household }) {
   const householdId = household.id;
   const currency = household.currency ?? 'EUR';
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(startsWithNewForm);
   const [search, setSearch] = useState('');
   const [ownership, setOwnership] = useState('ALL');
   const [warranty, setWarranty] = useState('ALL');

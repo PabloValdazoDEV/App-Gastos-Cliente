@@ -15,6 +15,7 @@ import { formatCents } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
 import { CalendarPurchasePaymentForm } from '../features/purchases/CalendarPurchasePaymentForm';
 import { isPurchaseFinancialSource, purchaseFinancialScopeLabel, purchaseFinancialSourceLabel } from '../features/purchases/purchaseFinancialPresentation';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const statusConfig = {
   PAID: { label: 'Pagado', icon: CircleCheck, className: 'bg-emerald-100 text-emerald-800' },
@@ -117,6 +118,8 @@ const occurrenceKey = (event) => event.sourceType === 'RECURRING_EXPENSE'
 function RecordedPaymentControl({ event, householdId, timezone }) {
   const queryClient = useQueryClient();
   const [paymentDate, setPaymentDate] = useState(event.paymentDate ?? calendarToday(timezone));
+  // Paid today by default; the date only shows when it was another day.
+  const [otherDay, setOtherDay] = useState(false);
   const mutation = useMutation({
     mutationFn: async (nextDate) => {
       if (event.sourceType === 'INVOICE') {
@@ -140,12 +143,13 @@ function RecordedPaymentControl({ event, householdId, timezone }) {
     submitEvent.preventDefault();
     mutation.mutate(isPaid ? null : paymentDate);
   }}>
-    {!isPaid ? <label className="min-w-40 flex-1 text-xs font-semibold text-text-muted">Fecha en que se pagó
+    {!isPaid ? otherDay ? <label className="min-w-40 flex-1 text-xs font-semibold text-text-muted">Fecha de pago
       <input className="mt-1 min-h-11 w-full rounded-xl border border-border-strong bg-surface px-3 text-sm text-text" onChange={(changeEvent) => setPaymentDate(changeEvent.target.value)} required type="date" value={paymentDate} />
-    </label> : <p className="mr-auto text-xs text-text-muted">Confirmado para el {formatDate(event.paymentDate)}</p>}
+    </label> : null : <p className="mr-auto text-xs text-text-muted">Pagado el {formatDate(event.paymentDate)}</p>}
     <button className={isPaid ? secondaryAction : primaryAction} disabled={mutation.isPending} type="submit">
-      {mutation.isPending ? 'Guardando…' : isPaid ? 'Deshacer pago' : 'Confirmar pago'}
+      {mutation.isPending ? 'Guardando…' : isPaid ? 'Deshacer pago' : 'Marcar como pagado'}
     </button>
+    {!isPaid && !otherDay ? <button className="min-h-11 rounded-xl px-2 text-sm font-semibold text-brand-strong hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={() => setOtherDay(true)} type="button">¿Otro día?</button> : null}
     {mutation.isError ? <p className="basis-full text-sm text-red-700" role="alert">{mutation.error?.message || 'No se pudo guardar el pago. Inténtalo de nuevo.'}</p> : null}
   </form>;
 }
@@ -192,7 +196,7 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
     <li aria-labelledby={headingId} className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card [overflow-wrap:anywhere] sm:p-5">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-40">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-soft">{event.dateBasis === 'CHARGE_DATE' ? 'Cobro: ' : event.dateBasis === 'INVOICE_DATE' ? 'Emisión: ' : ''}{formatDate(event.dueDate, event.datePrecision === 'MONTH')}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-text-soft">{event.dateBasis === 'CHARGE_DATE' ? 'Se cobra el ' : event.dateBasis === 'INVOICE_DATE' ? 'Factura del ' : 'Vence el '}{formatDate(event.dueDate, event.datePrecision === 'MONTH')}</p>
           <h3 className="mt-1 break-words font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" id={headingId} ref={heading} tabIndex={-1}>{event.name}</h3>
           <p className="mt-1 text-xs font-bold text-brand-strong">{purchaseSource ? purchaseFinancialSourceLabel(event.sourceType) : recurring ? 'Gasto recurrente' : source?.label ?? 'Vencimiento'}</p>
           <p className="mt-1 break-words text-sm text-text-muted">{purchaseSource ? purchaseFinancialScopeLabel(event) : event.scope === 'PERSONAL' ? `Personal${event.personalPerson?.name ? ` · ${event.personalPerson.name}` : ''}` : 'Gasto común'}{event.category?.name ? ` · ${event.category.name}` : ''}</p>
@@ -202,8 +206,8 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
           <p className="break-words text-xl font-extrabold">{formatCents(event.status === 'PAID' ? event.actualAmountCents : event.expectedAmountCents ?? event.amountCents, currency)}</p>
         </div>
       </div>
-      {event.datePrecision === 'MONTH' ? <p className="mt-2 text-xs leading-5 text-text-muted">Total del mes completo, sin día concreto. Se muestra si el rango incluye parte de ese mes.</p> : null}
-      {purchaseSource && event.status === 'PAID' ? <p className="mt-2 text-xs leading-5 text-text-muted">Previsto para este vencimiento: {formatCents(event.expectedAmountCents, currency)}. El importe real se utiliza en el mes de la fecha de pago.</p> : null}
+      {event.datePrecision === 'MONTH' ? <MoreInfo className="mt-2">Total del mes completo, sin día concreto. Se muestra si el rango incluye parte de ese mes.</MoreInfo> : null}
+      {purchaseSource && event.status === 'PAID' ? <MoreInfo className="mt-2">Previsto para este vencimiento: {formatCents(event.expectedAmountCents, currency)}. El importe real se utiliza en el mes de la fecha de pago.</MoreInfo> : null}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${status.className}`}><Icon className="size-3.5" aria-hidden="true" />{status.label}</span>
         {event.status === 'PAID' && event.paymentDate ? <p className="text-sm text-text-muted">Fecha de pago: {formatDate(event.paymentDate)}</p> : null}
@@ -211,7 +215,7 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
       {canRegister || canEdit ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {canRegister ? <>
-            <button aria-controls={formId} aria-expanded={isOpen && selection?.initialStatus === 'PAID'} className={primaryAction} onClick={(click) => openForm(click, 'create', 'PAID')} type="button">Marcar pagado</button>
+            <button aria-controls={formId} aria-expanded={isOpen && selection?.initialStatus === 'PAID'} className={primaryAction} onClick={(click) => openForm(click, 'create', 'PAID')} type="button">Marcar como pagado</button>
             {recurring ? <button aria-controls={formId} aria-expanded={isOpen && selection?.initialStatus === 'SKIPPED'} className={secondaryAction} onClick={(click) => openForm(click, 'create', 'SKIPPED')} type="button">Omitir</button> : null}
           </> : (
             <button aria-controls={formId} aria-expanded={isOpen} className={secondaryAction} onClick={(click) => openForm(click, 'edit', event.status)} type="button">{purchaseInstallment ? 'Editar pago de cuota' : 'Editar registro'}</button>
@@ -354,7 +358,7 @@ function HouseholdCalendar({ currentHousehold }) {
   return (
     <div className="min-w-0 space-y-6 focus:outline-none" ref={calendarRef} tabIndex={-1}>
       <PageHeader title="Calendario" />
-      <p className="text-sm leading-6 text-text-muted">Todos los gastos del periodo: recurrentes, facturas, variables, puntuales y pagos de compras. Incluye los gastos comunes y tus gastos personales.</p>
+      <MoreInfo>Todos los gastos del periodo: recurrentes, facturas, variables, puntuales y pagos de compras. Incluye los gastos comunes y tus gastos personales.</MoreInfo>
       <section aria-label="Mes del calendario" className="min-w-0 rounded-2xl border border-border bg-surface p-4">
         <div className="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 aria-live="polite" aria-atomic="true" className="text-lg font-bold capitalize">{formatDate(`${month}-01`, true)}</h2>

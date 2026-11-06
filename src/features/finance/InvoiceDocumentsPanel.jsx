@@ -21,6 +21,7 @@ import {
   formatDocumentSize,
   validateInvoiceDocumentSelection,
 } from './invoiceDocumentSchema';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 const BLOB_URL_REVOKE_DELAY_MS = 60_000;
 
@@ -346,9 +347,9 @@ export function InvoiceDocumentsPanel({ householdId, invoice }) {
               {documents.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border-strong bg-surface p-4">
                   <p className="text-sm font-bold text-text">Todavía no hay documentos</p>
-                  <p className="mt-1 text-sm leading-5 text-text-muted">
+                  <MoreInfo className="mt-1">
                     Puedes conservar la factura sin adjuntos o añadirlos más abajo.
-                  </p>
+                  </MoreInfo>
                 </div>
               ) : (
                 <ul className="space-y-3" aria-label="Documentos adjuntos">

@@ -35,13 +35,17 @@ import {
   peopleFrom,
   todayIso,
 } from './expensePageUtils';
+import { startsWithNewForm } from '../features/finance/startsWithNewForm';
+import { suggestedInvoicePeriod } from '../features/finance/invoicePeriod';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const invoiceSchema = z
   .object({
     amount: positiveMoneyInputSchema,
     categoryId: z.string().min(1, 'Selecciona una categoría.'),
-    chargeDate: z.string().optional(),
-    invoiceDate: z.string().min(1, 'Indica la fecha de la factura.'),
+    chargeDate: z.string().min(1, 'Indica cuándo te la cobran.'),
+    // Optional in the form: when empty the charge date is used.
+    invoiceDate: z.string().optional(),
     notes: z.string().trim().max(2_000, 'Las notas son demasiado largas.').optional(),
     periodEnd: z.string().min(1, 'Indica el fin del periodo.'),
     periodStart: z.string().min(1, 'Indica el inicio del periodo.'),
@@ -61,10 +65,6 @@ const invoiceSchema = z
       });
     }
   });
-
-function monthStart() {
-  return `${todayIso().slice(0, 7)}-01`;
-}
 
 function centsForInput(cents) {
   return Number.isSafeInteger(cents) ? (cents / 100).toFixed(2) : '';
@@ -113,7 +113,7 @@ function groupInvoicesByCategory(invoices) {
     .sort((left, right) => invoiceRecency(right.latestInvoice) - invoiceRecency(left.latestInvoice));
 }
 
-function InvoiceForm({ categories, creationPreset = null, householdId, initialInvoice = null, onClose, people }) {
+function InvoiceForm({ categories, creationPreset = null, householdId, initialInvoice = null, invoices = [], onClose, people }) {
   const queryClient = useQueryClient();
   const isEditing = Boolean(initialInvoice);
   const isContextualCreation = Boolean(creationPreset) && !isEditing;
@@ -130,27 +130,52 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
       onClose();
     },
   });
+  const initialCategoryId = initialInvoice?.categoryId ?? (unavailableCategory ? '' : creationPreset?.categoryId) ?? categories[0]?.id ?? '';
+  const initialScope = initialInvoice?.scope ?? creationPreset?.scope ?? 'HOUSEHOLD';
+  const initialPersonId = initialInvoice?.personalPersonId ?? (unavailablePerson ? '' : creationPreset?.personalPersonId) ?? '';
+  const initialSuggestion = suggestedInvoicePeriod(
+    invoices,
+    { categoryId: initialCategoryId, scope: initialScope, personalPersonId: initialPersonId },
+    todayIso(),
+  );
   const {
-    formState: { errors },
+    formState: { dirtyFields, errors },
     handleSubmit,
     register,
     setFocus,
+    setValue,
     watch,
   } = useForm({
     defaultValues: {
       amount: centsForInput(initialInvoice?.amountCents),
-      categoryId: initialInvoice?.categoryId ?? (unavailableCategory ? '' : creationPreset?.categoryId) ?? categories[0]?.id ?? '',
-      chargeDate: isoDate(initialInvoice?.chargeDate),
-      invoiceDate: isoDate(initialInvoice?.invoiceDate) || todayIso(),
+      categoryId: initialCategoryId,
+      // The visible date: when the money leaves the account. It decides the
+      // month the bill counts in. Old invoices without it show their issue date.
+      chargeDate: isoDate(initialInvoice?.chargeDate) || isoDate(initialInvoice?.invoiceDate) || todayIso(),
+      invoiceDate: isoDate(initialInvoice?.invoiceDate),
       notes: initialInvoice?.notes ?? '',
-      periodEnd: isoDate(initialInvoice?.periodEnd) || todayIso(),
-      periodStart: isoDate(initialInvoice?.periodStart) || monthStart(),
-      personalPersonId: initialInvoice?.personalPersonId ?? (unavailablePerson ? '' : creationPreset?.personalPersonId) ?? '',
-      scope: initialInvoice?.scope ?? creationPreset?.scope ?? 'HOUSEHOLD',
+      periodEnd: isoDate(initialInvoice?.periodEnd) || initialSuggestion.periodEnd,
+      periodStart: isoDate(initialInvoice?.periodStart) || initialSuggestion.periodStart,
+      personalPersonId: initialPersonId,
+      scope: initialScope,
     },
     resolver: zodResolver(invoiceSchema),
   });
   const scope = watch('scope');
+  const categoryId = watch('categoryId');
+  const personalPersonId = watch('personalPersonId');
+  const suggestion = isEditing
+    ? null
+    : suggestedInvoicePeriod(invoices, { categoryId, scope, personalPersonId }, todayIso());
+  const [moreDetails, setMoreDetails] = useState(() => Boolean(initialInvoice?.notes));
+  const showMoreDetails = moreDetails || Boolean(errors.invoiceDate || errors.notes);
+
+  // Follow the chosen category's last bill until the user edits the period.
+  useEffect(() => {
+    if (!suggestion || dirtyFields.periodStart || dirtyFields.periodEnd) return;
+    setValue('periodStart', suggestion.periodStart, { shouldDirty: false });
+    setValue('periodEnd', suggestion.periodEnd, { shouldDirty: false });
+  }, [suggestion?.periodStart, suggestion?.periodEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isContextualCreation) setFocus('amount');
@@ -164,8 +189,13 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
         body: {
           amountCents: eurosInputToCents(values.amount),
           categoryId: values.categoryId,
-          chargeDate: values.chargeDate || null,
-          invoiceDate: values.invoiceDate,
+          // An old invoice without a charge date stays without one unless the
+          // visible date was actually changed.
+          chargeDate:
+            isEditing && !initialInvoice.chargeDate && values.chargeDate === isoDate(initialInvoice.invoiceDate)
+              ? null
+              : values.chargeDate,
+          invoiceDate: values.invoiceDate || values.chargeDate,
           notes: values.notes || null,
           periodEnd: values.periodEnd,
           periodStart: values.periodStart,
@@ -227,7 +257,9 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
           <fieldset>
             <legend className="text-sm font-bold text-text">Periodo facturado</legend>
             <p className="mt-1 text-xs leading-5 text-text-muted">
-              Se incluyen ambos días para calcular el equivalente mensual ponderado.
+              {suggestion?.basedOn
+                ? 'Propuesto a continuación de tu factura anterior. Cámbialo si tu factura dice otra cosa.'
+                : 'Los días que cubre la factura (vienen impresos en ella). Sirve para calcular la media mensual.'}
             </p>
             <div className="mt-3 grid gap-5 sm:grid-cols-2">
               <FormField
@@ -247,22 +279,14 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
             </div>
           </fieldset>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <FormField
-              error={errors.invoiceDate?.message}
-              label="Fecha de emisión"
-              className="min-w-0"
-              type="date"
-              {...register('invoiceDate')}
-            />
-            <FormField
-              error={errors.chargeDate?.message}
-              label="Fecha de cobro (opcional)"
-              className="min-w-0"
-              type="date"
-              {...register('chargeDate')}
-            />
-          </div>
+          <FormField
+            error={errors.chargeDate?.message}
+            help="Decide en qué mes cuenta el gasto. Si no lo sabes, pon la fecha de la factura."
+            label="¿Cuándo te la cobran?"
+            className="min-w-0"
+            type="date"
+            {...register('chargeDate')}
+          />
 
           <fieldset>
             <legend className="text-sm font-bold text-text">¿A quién corresponde?</legend>
@@ -286,13 +310,33 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
             </SelectField>
           ) : null}
 
-          <TextareaField
-            error={errors.notes?.message}
-            label="Notas (opcional)"
-            maxLength={2_000}
-            placeholder="Por ejemplo, lectura estimada o regularización"
-            {...register('notes')}
-          />
+          <button
+            aria-controls="invoice-more-details"
+            aria-expanded={showMoreDetails}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 text-sm font-bold text-brand-strong hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            onClick={() => setMoreDetails((open) => !open)}
+            type="button"
+          >
+            {showMoreDetails ? 'Ocultar detalles' : 'Más detalles'}
+            <span className="font-normal text-text-muted">(fecha de emisión, notas)</span>
+          </button>
+          <div className="space-y-5" hidden={!showMoreDetails} id="invoice-more-details">
+            <FormField
+              error={errors.invoiceDate?.message}
+              help="La fecha impresa en la factura. Si la dejas vacía, usamos la del cobro."
+              label="Fecha de emisión (opcional)"
+              className="min-w-0"
+              type="date"
+              {...register('invoiceDate')}
+            />
+            <TextareaField
+              error={errors.notes?.message}
+              label="Notas (opcional)"
+              maxLength={2_000}
+              placeholder="Por ejemplo, lectura estimada o regularización"
+              {...register('notes')}
+            />
+          </div>
           <AuthError error={saveInvoice.error} />
           <SubmitButton
             isPending={saveInvoice.isPending}
@@ -319,9 +363,9 @@ function Statistics({ currency, statistics }) {
           <h2 className="text-xl font-extrabold tracking-tight" id="estadisticas-facturas">
             Medias por categoría
           </h2>
-          <p className="mt-0.5 text-sm text-text-muted">
+          <MoreInfo className="mt-0.5">
             Los importes se ponderan por los días que cubre cada factura.
-          </p>
+          </MoreInfo>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -374,7 +418,7 @@ export function InvoicesPage() {
   const household = useHousehold();
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(startsWithNewForm);
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
   const [deletingInvoiceId, setDeletingInvoiceId] = useState(null);
   const [expandedCategoryId, setExpandedCategoryId] = useState(null);
@@ -509,6 +553,7 @@ export function InvoicesPage() {
             <InvoiceForm
               categories={categories}
               householdId={householdId}
+              invoices={invoices.data ?? []}
               people={people}
               onClose={() => setShowForm(false)}
             />
@@ -660,6 +705,7 @@ export function InvoicesPage() {
                                   categories={categories}
                                   creationPreset={group}
                                   householdId={householdId}
+                                  invoices={invoices.data ?? []}
                                   key={group.groupKey}
                                   onClose={closeContextualForm}
                                   people={people}
@@ -679,7 +725,7 @@ export function InvoicesPage() {
                                   </p>
                                   <p className="mt-0.5 text-xs leading-5 text-text-soft">
                                     Emitida: {formatCivilDate(invoice.invoiceDate)}
-                                    {invoice.chargeDate ? ` · Cobrada: ${formatCivilDate(invoice.chargeDate)}` : ''}
+                                    {invoice.chargeDate ? ` · Se cobra el ${formatCivilDate(invoice.chargeDate)}` : ''}
                                   </p>
                                 </div>
                                 <div className="sm:text-right">

@@ -49,7 +49,8 @@ describe('PurchaseDetailsPage', () => {
     expect(screen.getByText('Móvil principal')).toBeVisible();
     expect(screen.getByText('Vigente hasta 17 sept 2029')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Volver a Compras' })).toHaveAttribute('href', '/compras');
-    expect(screen.getByText(/Su forma de pago determina el presupuesto/i)).toBeVisible();
+    // Secondary explanation: present but folded under "Ver más".
+    expect(screen.getByText(/Su forma de pago determina el presupuesto/i)).toBeInTheDocument();
     expect(await screen.findByText('No hay documentos guardados.')).toBeVisible();
     expect(mocks.documents).toHaveBeenCalledWith(expect.objectContaining({ householdId: 'home', purchaseId: 'phone' }));
   });

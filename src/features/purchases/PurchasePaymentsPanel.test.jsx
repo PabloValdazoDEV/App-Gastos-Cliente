@@ -91,7 +91,7 @@ describe('PurchasePaymentsPanel', () => {
     await user.type(within(form).getByLabelText('Importe real (€)'), '56');
     await user.clear(within(form).getByLabelText('Fecha de pago'));
     await user.type(within(form).getByLabelText('Fecha de pago'), '2026-09-16');
-    await user.click(within(form).getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(within(form).getByRole('button', { name: 'Guardar pago' }));
     await waitFor(() => expect(mocks.pay).toHaveBeenCalledWith({ householdId: 'home', purchaseId: 'purchase', installmentId: 'i1', body: { actualAmountCents: 5600, paidAt: '2026-09-16', notes: null } }));
     expect(await screen.findByText('Cuota registrada como pagada.')).toBeVisible();
     expect(screen.getByText('1 / 20 cuotas pagadas')).toBeVisible();
@@ -179,7 +179,7 @@ describe('PurchasePaymentsPanel', () => {
     const user = userEvent.setup(); const ctx = fixture(); let resolve;
     mocks.pay.mockReturnValue(new Promise((done) => { resolve = done; }));
     await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' }));
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     const updated = { ...purchase, financing: { ...purchase.financing, installments: [paidInstallment] } };
     await publishPurchase(ctx, updated);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Editar pago de cuota 1' })).toBeDisabled());
@@ -192,7 +192,7 @@ describe('PurchasePaymentsPanel', () => {
   });
 
   it.each([
-    ['pay', 'Marcar cuota 1 como pagada', 'Guardar pago de cuota'],
+    ['pay', 'Marcar cuota 1 como pagada', 'Guardar pago'],
     ['correct', 'Editar pago de cuota 1', 'Guardar corrección del pago'],
     ['revert', 'Volver cuota 1 a pendiente', 'Confirmar vuelta a pendiente'],
   ])('un conflicto de %s refresca compra y finanzas, cierra la acción y no muestra éxito', async (action, trigger, submit) => {
@@ -223,7 +223,7 @@ describe('PurchasePaymentsPanel', () => {
     const user = userEvent.setup(); const ctx = fixture(); let reject;
     mocks.pay.mockReturnValue(new Promise((_done, fail) => { reject = fail; }));
     await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' }));
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     ctx.rerenderProps({ householdId: 'other' });
     const newHouseholdPurchase = ctx.client.getQueryData(queryKeys.purchases.detail('other', 'purchase'));
     await act(async () => reject(Object.assign(new Error('Cuota ya pagada'), { status: 409 })));
@@ -243,7 +243,7 @@ describe('PurchasePaymentsPanel', () => {
     const updated = { ...purchase, financing: { ...purchase.financing, installments: [paidInstallment, { ...purchase.financing.installments[1], canRegisterPayment: true }] } };
     mocks.pay.mockImplementation(async () => { ctx.setServer(updated); return updated; });
     await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' }));
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Marcar cuota 2 como pagada' })).toBeEnabled());
     expect(screen.queryByRole('button', { name: /omitir/i })).not.toBeInTheDocument();
   });
@@ -256,7 +256,7 @@ describe('PurchasePaymentsPanel', () => {
     const user = userEvent.setup(); fixture(); mocks.pay.mockRejectedValue(new Error('No se puede registrar ahora'));
     await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' }));
     await user.type(screen.getByLabelText('Notas del pago (opcional)'), 'Conservar nota');
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No se puede registrar ahora');
     expect(screen.getByLabelText('Notas del pago (opcional)')).toHaveValue('Conservar nota');
   });
@@ -264,7 +264,7 @@ describe('PurchasePaymentsPanel', () => {
     const user = userEvent.setup(); fixture();
     await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' }));
     await user.clear(screen.getByLabelText('Importe real (€)'));
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('mayor que cero');
     await waitFor(() => expect(screen.getByLabelText('Importe real (€)')).toHaveFocus());
     expect(mocks.pay).not.toHaveBeenCalled();
@@ -319,14 +319,14 @@ describe('PurchasePaymentsPanel', () => {
     const user = userEvent.setup(); fixture(); let resolve;
     mocks.pay.mockReturnValue(new Promise((done) => { resolve = done; }));
     await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' }));
-    await user.dblClick(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.dblClick(screen.getByRole('button', { name: 'Guardar pago' }));
     expect(mocks.pay).toHaveBeenCalledTimes(1); expect(screen.getByRole('button', { name: 'Guardando pago…' })).toBeDisabled(); expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
     await act(async () => resolve(purchase));
   });
   it('no publica respuesta tardía después de desmontar', async () => {
     const user = userEvent.setup(); const ctx = fixture(); let resolve;
     mocks.pay.mockReturnValue(new Promise((done) => { resolve = done; }));
-    await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' })); await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' })); await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     ctx.unmount(); ctx.client.removeQueries();
     await act(async () => resolve(purchase));
     expect(ctx.client.getQueryData(queryKeys.purchases.detail('home', 'purchase'))).toBeUndefined();
@@ -340,7 +340,7 @@ describe('PurchasePaymentsPanel', () => {
   });
   it('pérdida de acceso oculta datos y formulario inmediatamente', async () => {
     const user = userEvent.setup(); fixture(); mocks.pay.mockRejectedValue(Object.assign(new Error('Compra no disponible'), { status: 404 }));
-    await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' })); await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Marcar cuota 1 como pagada' })); await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pueden consultar los pagos');
     expect(screen.queryByRole('list')).not.toBeInTheDocument(); expect(screen.queryByRole('form')).not.toBeInTheDocument();
   });

@@ -57,7 +57,7 @@ describe('PurchaseDocumentsPanel', () => {
     load.resolve([]);
     expect(await screen.findByText('No hay documentos guardados.')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Documentos (0)' })).toBeVisible();
-    expect(screen.getByText(/Solo pueden acceder quienes pueden ver esta compra/)).toBeVisible();
+    expect(screen.getByText(/Solo pueden acceder quienes pueden ver esta compra/)).toBeInTheDocument();
     expect(mocks.list.mock.calls[0][0]).toMatchObject({ householdId: 'home', purchaseId: 'purchase', signal: expect.any(AbortSignal) });
   });
 

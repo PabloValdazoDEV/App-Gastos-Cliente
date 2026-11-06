@@ -73,7 +73,8 @@ describe('VariableExpensesPage', () => {
     await screen.findByRole('heading', { name: 'No hay gastos variables' });
     await user.click(screen.getByRole('button', { name: 'Añadir el primer mes' }));
     expect(screen.queryByText('Ya están apuntados todos los gastos de este mes')).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    // The monthly total is marked as paid by default for the current month.
+    expect(screen.getByRole('checkbox', { name: 'Este total ya está pagado' })).toBeChecked();
     await user.type(screen.getByLabelText('Total del mes (€)'), '325,40');
     await user.click(screen.getByRole('button', { name: 'Guardar gasto variable' }));
 
@@ -90,6 +91,34 @@ describe('VariableExpensesPage', () => {
     });
     expect(mocks.saveVariableMonth.mock.calls[0][0].body).not.toHaveProperty('isComplete');
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard', 'household-1'] }));
+  });
+
+  it('al añadir en un mes que ya tiene apuntes avisa y suma, sin sustituir', async () => {
+    const user = userEvent.setup();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    mocks.variableExpenses.mockResolvedValue([{
+      id: 'month-1', categoryId: 'category-1', category: { name: 'Supermercado' },
+      ownerKey: 'HOUSEHOLD', scope: 'HOUSEHOLD', year, month, entryMode: 'DETAIL',
+      summaryAmountCents: null, totalCents: 25_000,
+      entries: [{ id: 'e1', amountCents: 25_000, spentOn: `${year}-${String(month).padStart(2, '0')}-01` }],
+    }]);
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Añadir gasto variable' }));
+
+    expect(await screen.findByText(/se sumará como un apunte más; no se borra nada/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Total del mes (€)'), '54,20');
+    await user.click(screen.getByRole('button', { name: 'Añadir al mes' }));
+
+    await waitFor(() => {
+      expect(mocks.saveVariableMonth).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({ append: true, summaryAmountCents: 5_420 }),
+        }),
+      );
+    });
   });
 
   it('el margen pertenece al grupo recomendado, no al mes registrado', async () => {

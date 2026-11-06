@@ -142,13 +142,18 @@ describe('RecurringExpensesPage', () => {
 
     await screen.findByRole('heading', { name: 'No hay gastos recurrentes' });
     await user.click(screen.getByRole('button', { name: 'Añadir el primer gasto' }));
-    expect(screen.getByText('El día en que empezó este gasto. Por ejemplo, cuando comenzó tu contrato de alquiler.')).toBeInTheDocument();
-    expect(screen.getByText('La fecha del siguiente pago que tienes que hacer.')).toBeInTheDocument();
-    expect(screen.getByText('La fecha del último pago. Si el gasto seguirá activo, déjala vacía.')).toBeInTheDocument();
-    for (const label of ['Fecha de inicio', 'Próximo vencimiento', 'Fecha final (opcional)']) {
+    // Only one date is visible; the rest lives under "Más opciones".
+    expect(screen.getByLabelText('Próximo pago')).toBeVisible();
+    expect(screen.getByLabelText('Último pago (opcional)')).not.toBeVisible();
+    expect(screen.getByLabelText('Fecha de inicio (opcional)')).not.toBeVisible();
+    // A payment already overdue (before today) is accepted without touching the start date.
+    await user.clear(screen.getByLabelText('Próximo pago'));
+    await user.type(screen.getByLabelText('Próximo pago'), '2020-01-01');
+    await user.click(screen.getByRole('button', { name: /Más opciones/ }));
+    for (const label of ['Último pago (opcional)', 'Fecha de inicio (opcional)']) {
       const date = screen.getByLabelText(label);
+      expect(date).toBeVisible();
       expect(date).toHaveClass('min-w-0', 'max-w-full');
-      expect(date.parentElement).toHaveClass('min-w-0');
       expect(date.parentElement.parentElement).toHaveClass('date-fields-grid');
     }
     await user.type(screen.getByLabelText('Nombre del gasto'), 'Alquiler');
@@ -167,6 +172,8 @@ describe('RecurringExpensesPage', () => {
           name: 'Alquiler',
           safetyMarginOverrideBps: 1_250,
           scope: 'HOUSEHOLD',
+          nextDueDate: '2020-01-01',
+          startDate: '2020-01-01',
         }),
       }),
     );
@@ -187,7 +194,7 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Registrar pago' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     const amount = screen.getByLabelText('Importe real (€)');
     await user.clear(amount);
     await user.type(amount, '49,50');
@@ -246,7 +253,7 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage('/gastos/recurrentes/expense-1?action=register-payment');
 
-    expect(await screen.findByRole('form', { name: 'Registrar pago de Internet' })).toBeInTheDocument();
+    expect(await screen.findByRole('form', { name: 'Pagar Internet' })).toBeInTheDocument();
     expect(screen.getByLabelText('Importe real (€)')).toHaveValue('50.00');
   });
 
@@ -265,7 +272,7 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Registrar pago' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     const amount = screen.getByLabelText('Importe real (€)');
     await user.clear(amount);
     await user.type(amount, '49,50');
@@ -292,12 +299,12 @@ describe('RecurringExpensesPage', () => {
     const user = userEvent.setup();
     mocks.recurring.mockResolvedValue([recurringExpense()]);
     renderPage();
-    const trigger = await screen.findByRole('button', { name: 'Registrar pago' });
+    const trigger = await screen.findByRole('button', { name: 'Marcar como pagado' });
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('radio', { name: 'Pagado' })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: 'Cancelar', exact: true }));
-    expect(screen.queryByRole('form', { name: /Registrar pago de/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: /^Pagar / })).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveFocus();
     expect(mocks.registerPayment).not.toHaveBeenCalled();
@@ -319,9 +326,9 @@ describe('RecurringExpensesPage', () => {
     await user.click(screen.getByRole('button', { name: 'Cancelar', exact: true }));
     expect(edit).toHaveFocus();
     await user.click(edit);
-    await user.click(screen.getByRole('button', { name: 'Registrar pago' }));
+    await user.click(screen.getByRole('button', { name: 'Marcar como pagado' }));
     expect(screen.queryByRole('form', { name: /Editar pago de/ })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('form', { name: /Registrar pago de/ })).toHaveLength(1);
+    expect(screen.getAllByRole('form', { name: /^Pagar / })).toHaveLength(1);
   });
 
   it('una respuesta tardía de registro no cierra ni roba el foco al formulario de otro gasto', async () => {
@@ -330,7 +337,7 @@ describe('RecurringExpensesPage', () => {
     mocks.registerPayment.mockReturnValueOnce(new Promise((resolve) => { resolveSave = resolve; }));
     mocks.recurring.mockResolvedValue([recurringExpense(), recurringExpense({ id: 'expense-2', name: 'Alquiler' })]);
     renderPage();
-    const triggers = await screen.findAllByRole('button', { name: 'Registrar pago' });
+    const triggers = await screen.findAllByRole('button', { name: 'Marcar como pagado' });
     await user.click(triggers[0]);
     await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     await waitFor(() => expect(mocks.registerPayment).toHaveBeenCalledOnce());
@@ -338,7 +345,7 @@ describe('RecurringExpensesPage', () => {
     const notes = screen.getByLabelText('Notas (opcional)');
     await user.type(notes, 'Borrador activo');
     await act(async () => { resolveSave({ payment: { id: 'payment-created' } }); });
-    expect(screen.getByRole('form', { name: 'Registrar pago de Alquiler' })).toBeInTheDocument();
+    expect(screen.getByRole('form', { name: 'Pagar Alquiler' })).toBeInTheDocument();
     expect(notes).toHaveFocus();
     expect(notes).toHaveValue('Borrador activo');
   });
@@ -383,7 +390,7 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Registrar pago' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     await user.click(
       screen.getByRole('checkbox', {
         name: /Usar el importe real en el próximo vencimiento/i,
@@ -429,6 +436,7 @@ describe('RecurringExpensesPage', () => {
     renderPage();
 
     await user.click(await screen.findByRole('button', { name: 'Editar' }));
+    await user.click(screen.getByRole('button', { name: /Más opciones/ }));
     await user.click(screen.getByRole('radio', { name: /Margen propio/i }));
     await user.type(screen.getByLabelText('Margen específico (%)'), '8,75');
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
@@ -719,6 +727,9 @@ describe('RecurringExpensesPage', () => {
     await user.selectOptions(frequency, 'CUSTOM_WEEKS');
     frequency.focus();
     await user.tab();
+    // The field's help is one ⓘ button away, then the input itself.
+    expect(screen.getByRole('button', { name: 'Ayuda: Se repite cada (semanas)' })).toHaveFocus();
+    await user.tab();
     const input = screen.getByRole('spinbutton', { name: 'Se repite cada (semanas)' });
     expect(input).toHaveFocus();
     expect(input).toHaveAttribute('inputmode', 'numeric');
@@ -729,6 +740,8 @@ describe('RecurringExpensesPage', () => {
     expect(frequency.closest('.grid')).toHaveClass('sm:grid-cols-2');
     const form = screen.getByRole('form', { name: 'Crear gasto recurrente' });
     expect(within(form).getByRole('button', { name: 'Guardar gasto recurrente' })).toHaveClass('w-full');
+    await user.tab({ shift: true });
+    expect(screen.getByRole('button', { name: 'Ayuda: Se repite cada (semanas)' })).toHaveFocus();
     await user.tab({ shift: true });
     expect(frequency).toHaveFocus();
   });

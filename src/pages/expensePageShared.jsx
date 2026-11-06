@@ -4,6 +4,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { controlClassName } from './expensePageUtils';
+import { MoreInfo } from '../components/ui/MoreInfo';
+import { useHelpToggle } from '../components/ui/useHelpToggle';
 
 export function SelectField({ children, error, label, name, ...props }) {
   const generatedId = useId();
@@ -150,12 +152,16 @@ export function TextareaField({ error, help, label, name, ...props }) {
   const id = props.id ?? `${name}-${generatedId}`;
   const errorId = `${id}-error`;
   const helpId = `${id}-help`;
+  const helpToggle = useHelpToggle(typeof label === 'string' ? label : 'este campo');
 
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={id}>
-        {label}
-      </label>
+      <div className="mb-1.5 flex min-w-0 items-center gap-1">
+        <label className="block text-sm font-bold text-text" htmlFor={id}>
+          {label}
+        </label>
+        {help && !error ? helpToggle.button(helpId) : null}
+      </div>
       <textarea
         {...props}
         aria-describedby={error ? errorId : help ? helpId : undefined}
@@ -169,7 +175,7 @@ export function TextareaField({ error, help, label, name, ...props }) {
           {error}
         </p>
       ) : help ? (
-        <p className="mt-1.5 text-xs leading-5 text-text-muted" id={helpId}>
+        <p className="mt-1.5 text-xs leading-5 text-text-muted" hidden={!helpToggle.open} id={helpId}>
           {help}
         </p>
       ) : null}
@@ -190,9 +196,7 @@ export function FormCard({ children, compact = false, description, onClose, titl
           <h2 className="break-words text-xl font-extrabold tracking-tight text-text" id={titleId}>
             {title}
           </h2>
-          {description ? (
-            <p className="mt-1 text-sm leading-6 text-text-muted">{description}</p>
-          ) : null}
+          {description ? <MoreInfo className="mt-0.5">{description}</MoreInfo> : null}
         </div>
         {onClose ? (
           <button

@@ -14,6 +14,7 @@ import {
   focusPurchaseFormError, isValidSplit, MAX_PURCHASE_ITEMS, purchaseDefaults,
   purchaseFormSchema, purchaseItemDefaults, purchasePayload, splitTotalBps,
 } from './purchaseFormState';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 const secondaryButton = 'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-4 py-2.5 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
 const percentage = (value) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(value / 100);
@@ -124,7 +125,7 @@ export function PurchaseForm({ people = [], initialPurchase = null, initialValue
           <FormField disabled={pending} error={errors.purchaseDate?.message} help={intakeHints.date} label="Fecha de compra" type="date" {...register('purchaseDate')} />
           <FormField disabled={pending} error={errors.total?.message} help={singleProduct ? 'Precio final de este producto, sin intereses de financiación.' : 'Precio de los productos, sin añadir los intereses de financiación.'} inputMode="decimal" label={`Total de la compra (${currency === 'EUR' ? '€' : currency})`} readOnly={paidHistory} {...register('total')} />
         </div>
-        {editing ? <p className="text-xs leading-5 text-text-muted">Si cambias la fecha de compra, se recalculan las garantías por duración. Las fechas fin introducidas manualmente se conservan.</p> : null}
+        {editing ? <MoreInfo>Si cambias la fecha de compra, se recalculan las garantías por duración. Las fechas fin introducidas manualmente se conservan.</MoreInfo> : null}
         <FormField disabled={pending} error={errors.merchant?.message} label="Tienda (opcional)" maxLength={200} {...register('merchant')} />
         <TextareaField disabled={pending} error={errors.notes?.message} label="Notas de la compra (opcional)" maxLength={2000} {...register('notes')} />
       </fieldset>
@@ -201,7 +202,7 @@ export function PurchaseForm({ people = [], initialPurchase = null, initialValue
         </section>
       ) : null}
 
-      <p className="text-sm leading-6 text-text-muted">El pago único aparecerá en Gastos puntuales; la financiación, en Gastos recurrentes hasta la última cuota, y su entrada en Puntuales. Siempre con margen 0 %, sin duplicar importes. Solo los pagos confirmados suman gasto utilizado; los saldos de tus cuentas no se modifican automáticamente.</p>
+      <MoreInfo>El pago único aparecerá en Gastos puntuales; la financiación, en Gastos recurrentes hasta la última cuota, y su entrada en Puntuales. Siempre con margen 0 %, sin duplicar importes. Solo los pagos confirmados suman gasto utilizado; los saldos de tus cuentas no se modifican automáticamente.</MoreInfo>
       <div className="space-y-3">
         <AuthError error={paymentConfirmation ? null : error} />
         <SubmitButton disabled={splitInvalid} isPending={pending} pendingLabel="Guardando compra…">{editing ? 'Guardar cambios de la compra' : 'Guardar compra'}</SubmitButton>

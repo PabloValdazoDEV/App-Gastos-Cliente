@@ -9,6 +9,7 @@ import { PurchaseConfirmation } from './PurchaseConfirmation';
 import { PurchaseInstallmentForm } from './PurchaseInstallmentForm';
 import { purchaseDateLabel } from './presentation';
 import { invalidatePurchasePaymentQueries, purchasePaymentsService } from './purchasePaymentsService';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 const secondaryButton = 'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-3 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
 const statusLabels = { PLANNED: 'Pendiente', PAID: 'Pagada', CANCELLED: 'Anulada' };
@@ -132,7 +133,7 @@ function PaymentsContent({ householdId, purchase, currency, timezone, disabled, 
   const financed = purchase.paymentMethod === 'FINANCED';
   return <section aria-labelledby={titleId} className="min-w-0 space-y-4 [overflow-wrap:anywhere]" ref={containerRef}>
     <h2 className="rounded-lg text-xl font-extrabold focus:outline-2 focus:outline-focus" id={titleId} ref={headingRef} tabIndex={-1}>Forma de pago · {financed ? 'Financiado' : 'Al contado'}</h2>
-    <p className="text-sm leading-6 text-text-muted">El presupuesto incluye las obligaciones de cada mes. Los pagos confirmados suman gasto utilizado por su fecha real y se muestran en el calendario. Los saldos no se modifican automáticamente.</p>
+    <MoreInfo>El presupuesto incluye las obligaciones de cada mes. Los pagos confirmados suman gasto utilizado por su fecha real y se muestran en el calendario. Los saldos no se modifican automáticamente.</MoreInfo>
     {success ? <SuccessNotice title={success} /> : null}
     {changeNotice ? <p aria-live="polite" className="rounded-xl border border-border bg-surface-muted p-4 text-sm leading-6 text-text" role="status">{changeNotice}</p> : null}
     {!financed ? <div className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-card">
@@ -159,17 +160,17 @@ function PaymentsContent({ householdId, purchase, currency, timezone, disabled, 
           </dl>
           <p className="font-bold">{progress.paidInstallmentCount} / {progress.installmentCount} cuotas pagadas</p>
           <progress aria-label="Cuotas pagadas" className="block h-3 w-full max-w-full accent-brand" max={Math.max(1, progress.installmentCount)} value={progress.paidInstallmentCount} />
-          <p className="text-xs leading-5 text-text-muted">Pagado suma los importes reales y la entrada confirmada. Pendiente suma las cuotas pendientes y la entrada sin confirmar. Un pago distinto al previsto no cambia las demás cuotas.</p>
+          <MoreInfo>Pagado suma los importes reales y la entrada confirmada. Pendiente suma las cuotas pendientes y la entrada sin confirmar. Un pago distinto al previsto no cambia las demás cuotas.</MoreInfo>
         </div>
         <div><h3 className="text-sm font-bold">Próxima cuota</h3><p className="mt-1 text-sm">{progress.nextInstallment ? <>Cuota {progress.nextInstallment.sequence} · {purchaseDateLabel(progress.nextInstallment.dueDate)} · {formatCents(progress.nextInstallment.expectedAmountCents, currency)}</> : 'No hay cuotas pendientes.'}</p></div>
-        <p className="text-xs leading-5 text-text-muted">Puedes editar la entidad y los datos de financiación en «Editar compra». Si hay cuotas pagadas, el plan queda protegido frente a cambios que borrarían el historial.</p>
+        <MoreInfo>Puedes editar la entidad y los datos de financiación en «Editar compra». Si hay cuotas pagadas, el plan queda protegido frente a cambios que borrarían el historial.</MoreInfo>
       </div>
       {form ? <PurchaseInstallmentForm currency={currency} error={form.status === 'PAID' ? correct.error : pay.error} installment={form} isPending={busy} key={form.id} onCancel={close} onSubmit={save} timezone={timezone} /> : null}
       <h3 className="text-lg font-extrabold">Calendario de cuotas de esta compra</h3>
       {!installments.length ? <p className="rounded-xl border border-border p-4 text-sm text-text-muted">No hay cuotas en este plan.</p> : <ol aria-label="Cuotas de la compra" className="min-w-0 space-y-3">
         {installments.map((installment) => <li className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-5" key={installment.id}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h4 className="font-extrabold">Cuota {installment.sequence}</h4><span className="rounded-lg bg-surface-muted px-2.5 py-1 text-xs font-bold">{statusLabels[installment.status] ?? 'Estado no disponible'}</span></div>
-          <p className="mt-2 text-sm">Vencimiento: <time dateTime={installment.dueDate?.slice(0, 10)}>{purchaseDateLabel(installment.dueDate)}</time> · Previsto: <span className="font-bold tabular-nums">{formatCents(installment.expectedAmountCents, currency)}</span></p>
+          <p className="mt-2 text-sm">Vence el <time dateTime={installment.dueDate?.slice(0, 10)}>{purchaseDateLabel(installment.dueDate)}</time> · Previsto: <span className="font-bold tabular-nums">{formatCents(installment.expectedAmountCents, currency)}</span></p>
           {installment.status === 'PAID' ? <p className="mt-2 text-sm text-brand-strong">Pagado: <strong className="tabular-nums">{formatCents(installment.actualAmountCents, currency)}</strong> · {purchaseDateLabel(installment.paidAt)}</p> : null}
           {installment.notes ? <p className="mt-2 whitespace-pre-wrap text-sm text-text-muted">{installment.notes}</p> : null}
           {installment.status === 'CANCELLED' ? <p className="mt-2 text-xs text-text-muted">Cuota anulada. No se considera pagada ni una cuota que se pueda omitir.</p> : <div className="mt-4 flex min-w-0 flex-wrap gap-2">

@@ -13,6 +13,7 @@ import { householdService } from '../features/households/householdService';
 import { useHousehold } from '../features/households/useHousehold';
 import { useHouseholdDraftGuard } from '../features/households/useHouseholdDraftGuard';
 import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 export function SettingsPage() {
   const { currentHousehold, isPending, isError, error, refetch } = useHousehold();
@@ -49,7 +50,7 @@ function HouseholdSettings({ currentHousehold }) {
       <PageHeader title="Preferencias" />
       <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7" aria-labelledby="security-margin">
         <h2 className="text-lg font-bold" id="security-margin">Margen de seguridad general</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">Se añade a la previsión mensual. Una categoría o un gasto recurrente pueden tener su propio margen. Usa 0 % si no quieres margen general. Las previsiones ya guardadas conservan sus aportaciones.</p>
+        <MoreInfo className="mt-2">Se añade a la previsión mensual. Una categoría o un gasto recurrente pueden tener su propio margen. Usa 0 % si no quieres margen general. Las previsiones ya guardadas conservan sus aportaciones.</MoreInfo>
         {canManage ? (
           <form
             className="mt-5 flex max-w-sm flex-col gap-3"

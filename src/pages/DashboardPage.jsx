@@ -1,17 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { UsersRound } from 'lucide-react';
+import { Plus, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { queryKeys } from '../api/queryKeys';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
+import { ContributionCard, DuePaymentsCard } from '../features/finance/components/HomeSummary';
 import { MonthlyAccountOverview } from '../features/finance/components/MonthlyAccountOverview';
 import { financeService } from '../features/finance/financeService';
 import { isoDate } from '../features/finance/money';
 import { nextPlanningMonth, planningMonthLabel } from '../features/finance/planningMonth';
 import { useHousehold } from '../features/households/useHousehold';
 import { todayIso } from './expensePageUtils';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const linkClass = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-border-strong px-4 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
@@ -40,9 +42,16 @@ export function DashboardPage() {
   return (
     <div className="min-w-0 space-y-5">
       <PageHeader eyebrow={planningMonthLabel(month)} title="Tu dinero este mes" description="Del día 1 al último: qué hay en las cuentas y qué falta por pagar." />
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
+        <ContributionCard data={data} month={month} monthLabel={planningMonthLabel(month)} />
+        <DuePaymentsCard data={data} householdId={householdId} />
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-2xl text-sm leading-6 text-text-muted">Usamos los saldos que has anotado, no una conexión con tu banco. Actualízalos después de pagar o hacer transferencias.</p>
-        <Link className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-brand px-4 py-2 text-sm font-bold text-on-brand hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to="/cuentas">Actualizar saldos</Link>
+        <MoreInfo>Usamos los saldos que has anotado, no una conexión con tu banco. Actualízalos después de pagar o hacer transferencias.</MoreInfo>
+        <div className="flex flex-wrap gap-2">
+          <Link className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-bold text-on-brand hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to="/gastos"><Plus aria-hidden="true" className="size-4" />Añadir gasto</Link>
+          <Link className={`shrink-0 ${linkClass}`} to="/cuentas">Actualizar saldos</Link>
+        </div>
       </div>
       {!data.budget.readiness.ready ? <p className="rounded-xl border border-border bg-surface p-4 text-sm leading-6" role="status">Falta completar el reparto del hogar. Mostramos los gastos registrados, pero la estimación mensual aún está incompleta. <Link className="inline-flex min-h-11 items-center font-bold text-brand-strong underline" to="/hogar">Completar reparto</Link></p> : null}
       {overview?.common ? <div className="grid min-w-0 items-start gap-5 xl:grid-cols-2">
@@ -55,7 +64,7 @@ export function DashboardPage() {
       </div> : <ErrorState title="Resumen mensual no disponible" description="No se han recibido los nuevos datos del mes. Comprueba que el servidor esté actualizado y vuelve a cargar." onRetry={dashboard.refetch} />}
       <section aria-labelledby="transfers-heading" className="min-w-0 rounded-2xl border border-border bg-surface p-5">
         <h2 className="text-lg font-bold" id="transfers-heading">¿Cuánto tenemos que ingresar?</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">Eso se prepara en Planificación: las aportaciones incluyen el ahorro para pagos futuros y el colchón. No son otro gasto ni se suman a los gastos de arriba.</p>
+        <MoreInfo className="mt-2">Eso se prepara en Planificación: las aportaciones incluyen el ahorro para pagos futuros y el colchón. No son otro gasto ni se suman a los gastos de arriba.</MoreInfo>
         {planning ? <p className="mt-2 text-sm font-semibold" role="status">{extrasPending ? 'Hay aportaciones extra pendientes de ingresar.' : planning.fundingStatus === 'FUNDED' ? 'Las aportaciones preparadas de este mes están confirmadas.' : 'Las aportaciones están guardadas; quedan ingresos por confirmar.'}</p> : null}
         {planning?.budgetChangedSincePreparation ? <p className="mt-2 text-sm text-text-muted" role="status">Han cambiado los gastos desde que preparaste el mes. Revisa las diferencias en Planificación; las aportaciones guardadas no se han cambiado.</p> : null}
         <div className="mt-3 flex flex-wrap gap-3">

@@ -38,6 +38,8 @@ import {
   positiveMoneyInputSchema,
   todayIso,
 } from './expensePageUtils';
+import { startsWithNewForm } from '../features/finance/startsWithNewForm';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const variableEntrySchema = z.object({
   amount: z.string(),
@@ -141,7 +143,15 @@ function personName(people, personId) {
   return people.find((person) => person.id === personId)?.name ?? 'Persona';
 }
 
-function VariableForm({ categories, householdId, initialMonth = null, onClose, people }) {
+function VariableForm({
+  categories,
+  currency = 'EUR',
+  existingMonths = [],
+  householdId,
+  initialMonth = null,
+  onClose,
+  people,
+}) {
   const queryClient = useQueryClient();
   const isEditing = Boolean(initialMonth);
   const saveMonth = useMutation({
@@ -206,6 +216,16 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
   const entries = watch('entries');
   const period = watch('period');
   const scope = watch('scope');
+  const categoryId = watch('categoryId');
+  const personalPersonId = watch('personalPersonId');
+  const existingMatch = isEditing
+    ? null
+    : existingMonths.find((item) =>
+        item.categoryId === categoryId &&
+        `${item.year}-${String(item.month).padStart(2, '0')}` === period &&
+        item.scope === scope &&
+        (scope !== 'PERSONAL' || item.personalPersonId === personalPersonId),
+      ) ?? null;
   const bounds = dateBounds(period);
   const periodField = register('period');
 
@@ -276,6 +296,8 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
               ? eurosInputToCents(values.summaryAmount)
               : undefined,
           year,
+          // Adding never replaces a month that already has data.
+          ...(isEditing ? {} : { append: true }),
         },
       });
     } catch {
@@ -354,15 +376,15 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
               />
               <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm font-semibold text-text">
                 <input aria-describedby="variable-summary-paid-help" className="mt-1 size-4 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" type="checkbox" {...register('summaryPaid')} />
-                <span>Este total ya está pagado<p className="mt-1 text-xs font-normal leading-5 text-text-muted" id="variable-summary-paid-help">Marcado por defecto para este mes. Si aún queda algo por pagar, desmárcalo.</p></span>
+                <span>Este total ya está pagado</span>
               </label>
             </div>
           ) : (
             <fieldset>
               <legend className="text-sm font-bold text-text">Apuntes del mes</legend>
-              <p className="mt-1 text-xs leading-5 text-text-muted">
+              <MoreInfo className="mt-1">
                 El total se calcula desde los apuntes. Cada apunte queda pagado por defecto si su fecha ya ha llegado.
-              </p>
+              </MoreInfo>
               <div className="mt-4 space-y-4">
                 {fields.map((field, index) => {
                   const isDateExpanded = dateEntryIds.includes(field.id);
@@ -510,9 +532,16 @@ function VariableForm({ categories, householdId, initialMonth = null, onClose, p
             maxLength={2_000}
             {...register('notes')}
           />
+          {existingMatch ? (
+            <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="status">
+              Ya hay {formatCents(totalForMonth(existingMatch), currency)} apuntados en{' '}
+              {existingMatch.category?.name ?? 'esta categoría'} de {formatMonth(existingMatch.year, existingMatch.month)}.
+              Lo que añadas ahora se sumará como un apunte más; no se borra nada.
+            </p>
+          ) : null}
           <AuthError error={saveMonth.error} />
           <SubmitButton isPending={saveMonth.isPending} pendingLabel="Guardando mes…">
-            {isEditing ? 'Guardar cambios' : 'Guardar gasto variable'}
+            {isEditing ? 'Guardar cambios' : existingMatch ? 'Añadir al mes' : 'Guardar gasto variable'}
           </SubmitButton>
         </form>
       )}
@@ -533,9 +562,9 @@ function VariableStatistics({ currency, householdId, people, statistics }) {
           <h2 className="text-xl font-extrabold tracking-tight" id="estadisticas-variables">
             Medias de gasto
           </h2>
-          <p className="mt-0.5 text-sm text-text-muted">
+          <MoreInfo className="mt-0.5">
             La media usa automáticamente solo los meses que ya han terminado.
-          </p>
+          </MoreInfo>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -592,7 +621,7 @@ export function VariableExpensesPage() {
   const household = useHousehold();
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(startsWithNewForm);
   const [editingMonthId, setEditingMonthId] = useState(null);
   const [deletingMonthId, setDeletingMonthId] = useState(null);
   const [search, setSearch] = useState('');
@@ -701,6 +730,8 @@ export function VariableExpensesPage() {
           ) : (
             <VariableForm
               categories={categories}
+              currency={currency}
+              existingMonths={months.data ?? []}
               householdId={householdId}
               onClose={() => setShowForm(false)}
               people={people}

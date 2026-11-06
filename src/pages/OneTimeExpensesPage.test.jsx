@@ -90,10 +90,12 @@ describe('OneTimeExpensesPage: filtros compartidos', () => {
     ]);
     renderPage();
     const year = await screen.findByRole('region', { name: '2026' });
-    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['2026', '2025']);
+    // Year headings only (each expense card also has its own level-3 heading).
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent).filter((text) => /^\d{4}$/.test(text))).toEqual(['2026', '2025']);
     expect(within(year).getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual(['Septiembre', 'Enero']);
     const september = within(year).getByRole('region', { name: 'Septiembre' });
-    expect(within(september).getAllByRole('heading', { level: 5 }).map((heading) => heading.textContent)).toEqual(['Más reciente', 'Primero del mes']);
+    // Expense names inside the month, newest first.
+    expect(within(september).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Más reciente', 'Primero del mes']);
     expect(within(screen.getByRole('region', { name: '2025' })).getByRole('heading', { name: 'Anterior' })).toBeVisible();
   });
 

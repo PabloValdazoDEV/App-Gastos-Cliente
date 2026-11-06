@@ -20,6 +20,7 @@ import { invalidateBudgetQueries } from '../finance/invalidateBudgetQueries';
 import { householdService } from './householdService';
 import { categoryIconLabels, categoryIconOptions as iconOptions } from './categoryIconDefinitions';
 import { CategoryIconBadge } from './categoryIcons';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 const inputClass =
   'min-h-12 w-full rounded-xl border border-border-strong bg-surface px-3.5 py-2.5 text-base text-text shadow-sm outline-none transition-colors focus:border-brand focus:ring-3 focus:ring-brand-soft disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-muted';
@@ -328,10 +329,10 @@ export function CategoryManager({ household }) {
               Categorías
             </h2>
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
+          <MoreInfo className="mt-2">
             El color y el icono ayudan a reconocer los gastos. Un margen propio sustituye al
             general solo en esa categoría.
-          </p>
+          </MoreInfo>
         </div>
         {canManage && !showCreate ? (
           <button

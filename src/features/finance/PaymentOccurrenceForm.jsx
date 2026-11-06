@@ -18,6 +18,7 @@ import {
   paymentOccurrencePayload,
   paymentOccurrenceSchema,
 } from './paymentOccurrence';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 export function PaymentOccurrenceForm({
   currency = 'EUR',
@@ -92,7 +93,7 @@ export function PaymentOccurrenceForm({
   return (
     <form
       aria-busy={savePayment.isPending}
-      aria-label={isEditing ? `Editar pago de ${formatCivilDate(occurrenceDate)}` : `Registrar pago de ${expense.name}`}
+      aria-label={isEditing ? `Editar pago de ${formatCivilDate(occurrenceDate)}` : `Pagar ${expense.name}`}
       className="mt-5 min-w-0 max-w-full border-t border-border pt-5"
       id={id}
       noValidate
@@ -106,9 +107,9 @@ export function PaymentOccurrenceForm({
             Previsto: {formatCents(expectedAmountCents, currency)} · {formatCivilDate(occurrenceDate)}
           </p>
           {isEditing ? (
-            <p className="mt-2 text-xs leading-5 text-text-muted">
+            <MoreInfo className="mt-2">
               Cambia solo este registro histórico; el próximo vencimiento y su importe no se alteran.
-            </p>
+            </MoreInfo>
           ) : null}
         </div>
         <button

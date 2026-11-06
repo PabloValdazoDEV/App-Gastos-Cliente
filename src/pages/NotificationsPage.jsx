@@ -20,6 +20,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { publicEnv } from '../config/env';
 import { AuthError } from '../features/auth/components/AuthFeedback';
 import { notificationService } from '../features/notifications/notificationService';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const preferenceQueryKey = ['notificationPreferences'];
 const primaryButton =
@@ -538,9 +539,9 @@ function NotificationPreferences({ query }) {
         </span>
         <div>
           <h2 className="text-xl font-extrabold tracking-tight text-text">Preferencias</h2>
-          <p className="mt-1 text-sm leading-6 text-text-muted">
+          <MoreInfo className="mt-1">
             Elige cómo quieres recibir los recordatorios y con cuánta antelación.
-          </p>
+          </MoreInfo>
         </div>
       </div>
 

@@ -15,7 +15,8 @@ import { isPlanningMonth, nextPlanningMonth, planningMonthLabel } from '../featu
 import { financeService } from '../features/finance/financeService';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
 import { useHousehold } from '../features/households/useHousehold';
-import { todayIso } from './expensePageUtils';
+import { formatCivilDate, todayIso } from './expensePageUtils';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const formatBalanceInput = (cents) => ((cents ?? 0) / 100).toFixed(2).replace('.', ',');
 
@@ -130,10 +131,10 @@ function MonthPlanning({ currentHousehold, month }) {
       ) : (
         <section className="rounded-3xl border border-border bg-surface p-5 shadow-card sm:p-7" aria-labelledby="confirmar-saldos">
           <h2 className="text-lg font-bold" id="confirmar-saldos">Preparar las transferencias de {planningMonthLabel(month)}</h2>
-          <p className="mt-2 text-sm leading-6 text-text-muted">
+          <MoreInfo className="mt-2">
             Revisa la previsión del día 1 al último día del mes que vas a financiar. Guarda el cálculo antes de confirmar las transferencias. No se consulta tu banco ni se mueve dinero.
-          </p>
-          <p className="mt-2 text-sm leading-6 text-text-muted">Los saldos se registran como referencia de cobertura: no se descuentan automáticamente de esta aportación, porque pueden estar reservados para otros pagos o para el colchón. Las medias variables usan meses terminados; cuando faltan 3 días o menos para acabar el mes, también incluyen su gasto registrado como cierre estimado para preparar el siguiente.</p>
+          </MoreInfo>
+          <MoreInfo className="mt-2">Los saldos se registran como referencia de cobertura: no se descuentan automáticamente de esta aportación, porque pueden estar reservados para otros pagos o para el colchón. Las medias variables usan meses terminados; cuando faltan 3 días o menos para acabar el mes, también incluyen su gasto registrado como cierre estimado para preparar el siguiente.</MoreInfo>
           <dl className="mt-5 grid gap-3 rounded-2xl bg-surface-muted p-4 sm:grid-cols-3">
             <div>
               <dt className="text-xs font-semibold text-text-muted">Previsión conjunta y tus gastos personales</dt>
@@ -210,7 +211,7 @@ function MonthPlanning({ currentHousehold, month }) {
             <CheckCircle2 className="size-6 text-brand" aria-hidden="true" />
             <div>
               <h2 className="text-lg font-bold" id="ultima-planificacion">Transferencias del mes seleccionado</h2>
-              <p className="text-sm text-text-muted">{displayedPlanning.month}/{displayedPlanning.year} · cálculo {isoDate(displayedPlanning.calculationDate)}</p>
+              <p className="text-sm text-text-muted">{planningMonthLabel(`${displayedPlanning.year}-${String(displayedPlanning.month).padStart(2, '0')}`)} · calculado el {formatCivilDate(isoDate(displayedPlanning.calculationDate))}</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -254,7 +255,7 @@ function MonthPlanning({ currentHousehold, month }) {
             </p>
           ) : <p className="mt-4 text-sm text-text-muted">Las transferencias conjuntas están cubiertas. Cada persona puede confirmar su aportación personal.</p>}
           {fund.isError ? <p className="mt-3 text-sm text-red-700" role="alert">{fund.error.message}</p> : null}
-          <p className="mt-3 text-xs leading-5 text-text-muted">Esta confirmación registra solo la aportación prevista guardada, sin incluir extras. No hace transferencias ni suma otra vez ese dinero al saldo de las cuentas.</p>
+          <MoreInfo className="mt-3">Esta confirmación registra solo la aportación prevista guardada, sin incluir extras. No hace transferencias ni suma otra vez ese dinero al saldo de las cuentas.</MoreInfo>
           <PlanningExtras currency={currency} disabled={fund.isPending || correctionActive} householdId={householdId} planning={displayedPlanning} onOpenChange={setExtraActive} onStale={() => refresh(['dashboard', householdId])} onSaved={() => Promise.all([refresh(['dashboard', householdId]), refresh(['plannings', householdId]), refresh(['monthlyPlanning', householdId])])} />
           <PlanningCorrections currency={currency} disabled={fund.isPending || extraActive} householdId={householdId} planning={displayedPlanning} onOpenChange={setCorrectionActive} onStale={() => refresh(['dashboard', householdId])} onSaved={() => Promise.all([refresh(['dashboard', householdId]), refresh(['plannings', householdId]), refresh(['monthlyPlanning', householdId])])} />
         </section>
@@ -292,7 +293,7 @@ function HouseholdPlanning({ currentHousehold }) {
       <label className="block text-sm font-bold" htmlFor="planning-month">Mes a financiar</label>
       <input className="mt-2 min-h-12 max-w-full rounded-xl border border-border-strong px-3" id="planning-month" max="2200-12" min="2000-01" onChange={(event) => { if (isPlanningMonth(event.target.value)) setMonth(event.target.value); }} type="month" value={month} />
       <p className="mt-3 text-sm leading-6 text-text-muted">Previsión de {planningMonthLabel(month)}, del día 1 al {lastDay}. El sueldo cobrado a final del mes anterior financia este mes completo.</p>
-      <p className="mt-1 text-sm leading-6 text-text-muted">Cambiar el mes solo consulta otra previsión: no confirma ni modifica transferencias.</p>
+      <MoreInfo className="mt-1">Cambiar el mes solo consulta otra previsión: no confirma ni modifica transferencias.</MoreInfo>
     </section>
     <MonthPlanning currentHousehold={currentHousehold} key={month} month={month} />
   </div>;

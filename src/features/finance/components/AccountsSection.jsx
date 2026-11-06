@@ -11,6 +11,7 @@ import { useHouseholdDraftGuard } from '../../households/useHouseholdDraftGuard'
 import { financeService } from '../financeService';
 import { invalidateBudgetQueries } from '../invalidateBudgetQueries';
 import { eurosInputToCents, formatCents } from '../money';
+import { MoreInfo } from '../../../components/ui/MoreInfo';
 
 const primaryButton =
   'inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-extrabold text-on-brand shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
@@ -185,9 +186,9 @@ export function AccountsSection({ currency, householdId, people }) {
               <dd className="mt-1 text-xs text-text-muted">{personalAccounts.length === 1 ? '1 cuenta' : `${personalAccounts.length} cuentas`}</dd>
             </div>
           </dl>
-          <p className="mt-4 rounded-xl bg-surface-muted p-4 text-sm leading-6 text-text-muted">
+          <MoreInfo className="mt-4">
             Puedes añadir varias cuentas personales o conjuntas. Los saldos se introducen manualmente; no hay conexión bancaria automática.
-          </p>
+          </MoreInfo>
           <div className="mt-4 flex flex-wrap gap-2">
             <button className={primaryButton} onClick={openCreate} type="button">
               <UserPlus aria-hidden="true" className="size-5" />

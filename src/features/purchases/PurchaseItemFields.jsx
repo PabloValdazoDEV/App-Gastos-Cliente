@@ -4,6 +4,7 @@ import { SelectField, TextareaField } from '../../pages/expensePageShared';
 import { FormField } from '../auth/components/FormField';
 import { addWarrantyMonths, formatWarrantyPreview } from './purchaseFormState';
 import { PurchaseWarrantySuggestion } from './PurchaseWarrantySuggestion';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 export function PurchaseItemFields({ register, watch, setValue, errors = {}, prefix = '', purchaseDate, disabled, currency = 'EUR', singleProduct = false, warrantyHelp }) {
   const id = useId();
@@ -56,7 +57,7 @@ export function PurchaseItemFields({ register, watch, setValue, errors = {}, pre
             <p aria-live="polite" className="break-words text-sm font-semibold text-brand-deep" id={`${id}-preview`}>
               {preview && /^\d{4}-\d{2}-\d{2}$/.test(preview) ? `Hasta el ${formatWarrantyPreview(preview)}` : 'Indica los datos para calcular la fecha fin.'}
             </p>
-            <p className="text-xs leading-5 text-text-muted">La duración se calcula desde la fecha de compra. Si empieza en otra fecha, indica la fecha fin. Puedes corregir la garantía detectada o la sugerencia antes de guardar.</p>
+            <MoreInfo>La duración se calcula desde la fecha de compra. Si empieza en otra fecha, indica la fecha fin. Puedes corregir la garantía detectada o la sugerencia antes de guardar.</MoreInfo>
           </div>
         )}
         {setValue ? <PurchaseWarrantySuggestion disabled={disabled} purchaseDate={purchaseDate} warrantyEnabled={warrantyEnabled} onApply={() => {

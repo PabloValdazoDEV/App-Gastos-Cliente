@@ -52,12 +52,15 @@ describe('Inicio: saldo y gastos del mes', () => {
     expect(within(card).getByText('2000,00 €')).toBeVisible();
     expect(amount(card, 'Previsto gastar en total')).toHaveTextContent('1040,00');
     expect(amount(card, 'Ya confirmado como pagado')).toHaveTextContent('200,00');
-    expect(amount(card, 'Falta pagar o confirmar')).toHaveTextContent('840,00');
+    // What is still pending is split into recorded-but-unconfirmed expenses and the not-yet-recorded forecast.
+    expect(amount(card, 'Gastos registrados sin pago confirmado')).toHaveTextContent('600,00');
+    expect(amount(card, 'Previsión aún sin registrar (no es un pago del calendario)')).toHaveTextContent('240,00');
+    expect(within(card).getByText('Si se cumple la previsión, quedarían')).toBeVisible();
     expect(within(card).getByText('1160,00 €')).toBeVisible();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByText(/Margen del presupuesto|683,37|1439,17|755,80/)).not.toBeInTheDocument();
-    expect(screen.getByText(/no una conexión con tu banco/)).toBeVisible();
-    expect(screen.getByText(/Si ya pagaste algo pero no lo has confirmado/)).toBeVisible();
+    expect(screen.getByText(/no una conexión con tu banco/)).toBeInTheDocument();
+    expect(within(card).getByText(/Si ya pagaste alguno, confírmalo en Calendario/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'Actualizar saldos' })).toHaveAttribute('href', '/cuentas');
   });
 
@@ -69,7 +72,7 @@ describe('Inicio: saldo y gastos del mes', () => {
     expect(explanation).not.toBeVisible();
     await user.click(screen.getByText('Ver de dónde sale cada importe'));
     expect(explanation).toBeVisible();
-    expect(explanation).toHaveTextContent('− pendiente 840,00 € = 1160,00 €');
+    expect(explanation).toHaveTextContent('− gastos registrados sin confirmar 600,00 € − previsión aún sin registrar 240,00 € = 1160,00 €');
     expect(screen.getByText('Compra semanal')).not.toBeVisible();
     const variables = screen.getByText('Gastos variables').closest('summary');
     variables.focus();
@@ -80,7 +83,7 @@ describe('Inicio: saldo y gastos del mes', () => {
     expect(screen.getByText('Compra semanal')).toBeVisible();
     expect(screen.getByText(/440,00 € previstos/)).toHaveTextContent('40,00 € de colchón configurado');
     expect(screen.getByText(/440,00 € previstos/)).toHaveTextContent('− 200,00 € registrados = 240,00 €');
-    expect(screen.getByText('Estimación, no es un recibo')).toBeVisible();
+    expect(screen.getByText('Previsión, no es un recibo')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Revisar gastos y confirmar pagos' })).toHaveAttribute('href', '/calendario');
   });
 
@@ -104,10 +107,10 @@ describe('Inicio: saldo y gastos del mes', () => {
     } }));
     renderDashboard();
     const common = await screen.findByRole('region', { name: 'Cuenta conjunta' });
-    expect(within(common).getByText('Con ese saldo, faltarían')).toBeVisible();
+    expect(within(common).getByText('Si se cumple la previsión, faltarían')).toBeVisible();
     expect(within(common).getByText('640,00 €')).toBeVisible();
     const personal = screen.getByRole('region', { name: 'Tus cuentas personales' });
-    expect(within(personal).getByText(/No descuenta tu aportación a la cuenta conjunta/)).toBeVisible();
+    expect(within(personal).getByText(/No descuenta tu aportación a la cuenta conjunta/)).toBeInTheDocument();
   });
 
   it('does not claim all funds are confirmed when agreed extras remain', async () => {
@@ -175,9 +178,12 @@ describe('Inicio: saldo y gastos del mes', () => {
   ])('refreshes the visible remaining amount after changes to %s', async (name, invalidate) => {
     const { client } = renderDashboard();
     const common = await screen.findByRole('region', { name: 'Cuenta conjunta' });
-    financeService.dashboard.mockResolvedValue(dashboardData({ monthlyOverview: { common: overview({ paidCents: 80000, remainingCents: 24000, projectedBalanceCents: 176000 }), personal: null } }));
+    expect(amount(common, 'Gastos registrados sin pago confirmado')).toHaveTextContent('600,00');
+    financeService.dashboard.mockResolvedValue(dashboardData({ monthlyOverview: { common: overview({ paidCents: 80000, unconfirmedCents: 0, remainingCents: 24000, projectedBalanceCents: 176000 }), personal: null } }));
     await act(async () => invalidate(client));
-    await waitFor(() => expect(amount(common, 'Falta pagar o confirmar')).toHaveTextContent('240,00'));
+    await waitFor(() => expect(amount(common, 'Ya confirmado como pagado')).toHaveTextContent('800,00'));
+    expect(within(common).queryByText('Gastos registrados sin pago confirmado')).not.toBeInTheDocument();
+    expect(amount(common, 'Previsión aún sin registrar (no es un pago del calendario)')).toHaveTextContent('240,00');
     expect(within(common).getByText('1760,00 €')).toBeVisible();
   });
 });

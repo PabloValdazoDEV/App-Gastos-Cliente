@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useHouseholdDraftGuard } from '../../households/useHouseholdDraftGuard';
 import { financeService } from '../financeService';
 import { eurosInputToCents, formatCents } from '../money';
+import { MoreInfo } from '../../../components/ui/MoreInfo';
 
 const secondary = 'min-h-12 min-w-0 max-w-full break-words rounded-xl border border-border-strong px-4 py-2 text-sm font-bold text-brand-strong disabled:opacity-60';
 const primary = 'min-h-12 min-w-0 max-w-full break-words rounded-xl bg-brand px-4 py-2 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60';
@@ -69,7 +70,7 @@ export function PlanningExtras({ householdId, planning, currency, onSaved, onSta
   if (!Array.isArray(planning.extras)) return null;
   return <section aria-labelledby="planning-extras" className="mt-5 min-w-0 rounded-2xl border border-border bg-surface p-4 sm:p-5" ref={section}>
     <h3 className="font-bold" id="planning-extras">Aportaciones extra conjuntas</h3>
-    <p className="mt-2 text-sm leading-6 text-text-muted">Una desviación no obliga a ingresar más: puede estar cubierta por el presupuesto o el colchón. Si acordáis un extra, quedará separado de la aportación inicial. Después podréis confirmar lo aportado por cada persona.</p>
+    <MoreInfo className="mt-2">Una desviación no obliga a ingresar más: puede estar cubierta por el presupuesto o el colchón. Si acordáis un extra, quedará separado de la aportación inicial. Después podréis confirmar lo aportado por cada persona.</MoreInfo>
     {planning.extraFunding?.agreedCents > 0 ? <p className="mt-3 text-sm font-bold">Extras acordados: {formatCents(planning.extraFunding.agreedCents, currency)} · Pendientes: {formatCents(planning.extraFunding.pendingCents, currency)}</p> : <p className="mt-3 text-sm text-text-muted">No hay aportaciones extra acordadas.</p>}
     {success ? <p className="mt-3 text-sm font-bold text-brand-strong" role="status">{success}</p> : null}
     {!action ? <button className={`${secondary} mt-3`} disabled={busy} onClick={() => open('CREATE')} type="button">Acordar un extra conjunto</button> : <form className="mt-4 space-y-4" onSubmit={submit}>
@@ -77,7 +78,7 @@ export function PlanningExtras({ householdId, planning, currency, onSaved, onSta
       {action.type === 'CREATE' ? <>
         <div><label className="block text-sm font-bold" htmlFor="extra-amount">Importe extra total del hogar ({currency})</label>
           <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" disabled={busy || Boolean(preview.data)} id="extra-amount" inputMode="decimal" maxLength={15} onChange={(event) => setAmount(event.target.value)} required value={amount} />
-          <p className="mt-1 text-xs text-text-muted">Solo lo adicional que queréis aportar. No vuelvas a incluir extras ya acordados.</p></div>
+          <MoreInfo className="mt-1">Solo lo adicional que queréis aportar. No vuelvas a incluir extras ya acordados.</MoreInfo></div>
         {preview.data ? <div className="rounded-xl bg-surface-muted p-4">
           <p className="text-sm font-bold">Reparto con los porcentajes guardados para este mes</p>
           <ul className="mt-2 space-y-2 text-sm">{preview.data.shares.map((share) => <li className="flex flex-wrap justify-between gap-2 break-words" key={share.personId}><span>{share.personName}</span><strong>{formatCents(share.amountCents, currency)}</strong></li>)}</ul>
@@ -99,7 +100,7 @@ export function PlanningExtras({ householdId, planning, currency, onSaved, onSta
     </form>}
     <div className="mt-4 space-y-3">{planning.extras.filter((extra) => !extra.cancelledAt).map((extra) => <article className="min-w-0 rounded-xl border border-border p-4" key={extra.id}>
       <h4 className="break-words font-bold">{extra.reason} · {formatCents(extra.amountCents, currency)}</h4>
-      <p className="mt-1 text-xs text-text-muted">Acordado el {new Date(extra.at).toLocaleDateString('es-ES')}</p>
+      <p className="mt-1 text-xs text-text-muted">Acordado el {new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(new Date(extra.at))}</p>
       <ul className="mt-3 space-y-3">{extra.shares.map((share) => <li className="min-w-0 border-t border-border pt-3" key={share.personId}>
         <p className="break-words text-sm"><strong>{share.personName}: {formatCents(share.amountCents, currency)}</strong> · {share.amountCents === 0 ? 'Sin aportación' : share.confirmedAt ? 'Aportado' : 'Pendiente'}</p>
         {share.amountCents > 0 ? <button className={`${secondary} mt-2 w-full sm:w-auto`} disabled={busy || isOpen} onClick={() => open(share.confirmedAt ? 'REVOKE' : 'CONFIRM', extra, share)} type="button">{share.confirmedAt ? `Corregir confirmación de ${share.personName}` : `Confirmar extra de ${share.personName}`}</button> : null}

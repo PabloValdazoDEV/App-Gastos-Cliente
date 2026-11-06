@@ -1,3 +1,5 @@
+import { MoreInfo } from './MoreInfo';
+
 export function PageHeader({ description, eyebrow, title }) {
   return (
     <header className="max-w-3xl">
@@ -9,11 +11,7 @@ export function PageHeader({ description, eyebrow, title }) {
       <h1 className="text-balance text-2xl font-extrabold tracking-tight text-text focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:text-3xl">
         {title}
       </h1>
-      {description ? (
-        <p className="mt-2 max-w-2xl text-pretty text-sm leading-6 text-text-muted sm:text-base sm:leading-7">
-          {description}
-        </p>
-      ) : null}
+      {description ? <MoreInfo className="mt-1">{description}</MoreInfo> : null}
     </header>
   );
 }

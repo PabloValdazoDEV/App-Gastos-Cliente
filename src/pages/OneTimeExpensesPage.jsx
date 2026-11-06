@@ -32,10 +32,13 @@ import {
 } from './expensePageShared';
 import {
   categoriesFrom,
+  formatCivilDate,
   peopleFrom,
   positiveMoneyInputSchema,
   todayIso,
 } from './expensePageUtils';
+import { startsWithNewForm } from '../features/finance/startsWithNewForm';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const oneTimeSchema = z
   .object({
@@ -171,7 +174,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
               <input aria-describedby="one-time-paid-help" className="size-4 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" type="checkbox" {...register('paid')} />
               Ya está pagado
             </label>
-            <p className="mt-1 text-xs leading-5 text-text-muted" id="one-time-paid-help">Marcado por defecto para gastos con fecha de hoy o anterior. Si aún está pendiente, desmárcalo.</p>
+            <MoreInfo className="mt-1">Marcado por defecto para gastos con fecha de hoy o anterior. Si aún está pendiente, desmárcalo.</MoreInfo>
           </fieldset>
           <fieldset>
             <legend className="text-sm font-bold text-text">¿A quién corresponde?</legend>
@@ -228,7 +231,7 @@ export function OneTimeExpensesPage() {
   const householdId = household.currentHousehold?.id;
   const currency = household.currentHousehold?.currency ?? 'EUR';
   const purchases = useLinkedPurchaseExpenses(householdId);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(startsWithNewForm);
   const [editingId, setEditingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [search, setSearch] = useState('');
@@ -340,7 +343,7 @@ export function OneTimeExpensesPage() {
           <section aria-labelledby="lista-gastos-puntuales">
             <div className="flex items-center gap-3">
               <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Receipt aria-hidden="true" className="size-5" /></span>
-              <div><h2 className="text-xl font-extrabold tracking-tight" id="lista-gastos-puntuales">Gastos registrados</h2><p className="text-sm text-text-muted">Agrupados por año y mes del gasto, más recientes primero. Se incorporan al cálculo del mes de su fecha.</p></div>
+              <div><h2 className="text-xl font-extrabold tracking-tight" id="lista-gastos-puntuales">Gastos registrados</h2><MoreInfo>Agrupados por año y mes del gasto, más recientes primero. Se incorporan al cálculo del mes de su fecha.</MoreInfo></div>
             </div>
             <div className="mt-4">
               <ExpenseFilters
@@ -359,7 +362,7 @@ export function OneTimeExpensesPage() {
                 renderItem={(expense) => (
                   <li className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-card" key={expense.id}>
                     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="break-words font-extrabold text-text">{expense.name}</h3><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {expense.expenseDate?.slice(0, 10)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
+                      <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="break-words font-extrabold text-text">{expense.name}</h3><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {formatCivilDate(expense.expenseDate)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
                       <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><p className="mt-1 text-xs font-semibold text-text-muted">{expense.paidAt ? 'Pagado' : 'Pendiente de confirmar'}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => { setEditingId(expense.id); setShowForm(true); }} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
                     </div>
                   </li>

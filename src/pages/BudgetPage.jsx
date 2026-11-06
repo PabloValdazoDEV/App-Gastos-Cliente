@@ -14,6 +14,7 @@ import { householdService } from '../features/households/householdService';
 import { categoriesFrom } from './expensePageUtils';
 import { ExpenseFilters } from './expensePageShared';
 import { purchaseFinancialScopeLabel, purchaseFinancialSourceLabel } from '../features/purchases/purchaseFinancialPresentation';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 const typeLabels = {
   RECURRING: 'Recurrente',
@@ -72,7 +73,7 @@ export function BudgetPage() {
       <PageHeader
         title="Presupuesto mensual estándar"
       />
-      <p className="text-sm leading-6 text-text-muted">Las compras se incluyen por los pagos que corresponden a este mes. Una compra financiada aporta su entrada y sus cuotas del mes, no todo el precio del producto.</p>
+      <MoreInfo>Las compras se incluyen por los pagos que corresponden a este mes. Una compra financiada aporta su entrada y sus cuotas del mes, no todo el precio del producto.</MoreInfo>
       {!budget.readiness.ready ? (
         <EmptyState
           action={<Link className="font-bold text-brand-strong" to="/hogar">Revisar personas y reparto</Link>}

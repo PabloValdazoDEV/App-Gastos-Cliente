@@ -208,8 +208,10 @@ describe('InvoicesPage', () => {
         body: expect.objectContaining({
           amountCents: 8_135,
           categoryId: 'category-1',
-          periodEnd: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-          periodStart: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+          // Continues right after the previous Luz invoice (16 jul – 15 ago).
+          periodStart: '2026-08-16',
+          periodEnd: '2026-09-15',
+          chargeDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
         }),
       }),
     );

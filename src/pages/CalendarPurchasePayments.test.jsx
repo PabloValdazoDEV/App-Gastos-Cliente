@@ -26,6 +26,8 @@ function setup() {
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   const tree = () => <QueryClientProvider client={client}><MemoryRouter><CalendarPage /></MemoryRouter></QueryClientProvider>;
   const view = render(tree());
+  // The calendar opens in the month grid; the list view shows every card of the month.
+  fireEvent.click(screen.getByRole('button', { name: 'Lista' }));
   return { ...view, client, invalidate, refresh: () => view.rerender(tree()) };
 }
 
@@ -68,7 +70,7 @@ describe('Calendar purchase payments', () => {
 
   it('opens the authorized complete installment, clearly distinguishing full payment from viewer allocation', async () => {
     const user = userEvent.setup(); setup();
-    const button = await screen.findByRole('button', { name: 'Marcar pagado' });
+    const button = await screen.findByRole('button', { name: 'Marcar como pagado' });
     await user.click(button);
     const form = await screen.findByRole('form', { name: 'Pagar de cuota 1' });
     expect(within(form).getByLabelText('Importe real (€)')).toHaveValue('100.00');
@@ -82,12 +84,12 @@ describe('Calendar purchase payments', () => {
 
   it('pays anticipatively through PurchaseInstallment and invalidates the shared financial views', async () => {
     const user = userEvent.setup(); const { invalidate } = setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     await screen.findByRole('form');
     await user.clear(screen.getByLabelText('Importe real (€)'));
     await user.type(screen.getByLabelText('Importe real (€)'), '104');
     await user.type(screen.getByLabelText('Notas del pago (opcional)'), 'Anticipada');
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     await waitFor(() => expect(mocks.pay.mock.calls[0][0]).toEqual({ householdId: 'home', purchaseId: 'purchase', installmentId: 'i1', body: { actualAmountCents: 10400, paidAt: '2026-09-17', notes: 'Anticipada' } }));
     await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument());
     expect(mocks.recurringPay).not.toHaveBeenCalled();
@@ -109,11 +111,11 @@ describe('Calendar purchase payments', () => {
     setup();
     const cards = await screen.findAllByRole('listitem');
     expect(within(cards[1]).queryByRole('button')).not.toBeInTheDocument();
-    await user.click(within(cards[0]).getByRole('button', { name: 'Marcar pagado' }));
-    await user.click(await screen.findByRole('button', { name: 'Guardar pago de cuota' }));
-    await waitFor(() => expect(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Marcar pagado' })).toBeInTheDocument());
+    await user.click(within(cards[0]).getByRole('button', { name: 'Marcar como pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar pago' }));
+    await waitFor(() => expect(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Marcar como pagado' })).toBeInTheDocument());
     expect(within(screen.getAllByRole('listitem')[0]).getByText('Pagado')).toBeInTheDocument();
-    expect(within(screen.getAllByRole('listitem')[0]).queryByRole('button', { name: 'Marcar pagado' })).not.toBeInTheDocument();
+    expect(within(screen.getAllByRole('listitem')[0]).queryByRole('button', { name: 'Marcar como pagado' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Omitir' })).not.toBeInTheDocument();
   });
 
@@ -121,7 +123,7 @@ describe('Calendar purchase payments', () => {
     mocks.calendar.mockResolvedValue(calendar([{ ...event, dueDate: '2026-09-01', status: 'OVERDUE', canRegisterPayment: false }]));
     setup();
     await screen.findByText('Atrasado');
-    expect(screen.queryByRole('button', { name: 'Marcar pagado' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Marcar como pagado' })).not.toBeInTheDocument();
   });
 
   it('shows paid actual share separately from expected obligation and edits using full recorded amount', async () => {
@@ -167,7 +169,7 @@ describe('Calendar purchase payments', () => {
     const user = userEvent.setup();
     mocks.detail.mockReturnValue(new Promise(() => {}));
     setup();
-    const trigger = await screen.findByRole('button', { name: 'Marcar pagado' });
+    const trigger = await screen.findByRole('button', { name: 'Marcar como pagado' });
     await user.click(trigger);
     expect(screen.getByText('Cargando datos del pago de compra')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
@@ -179,7 +181,7 @@ describe('Calendar purchase payments', () => {
     const user = userEvent.setup();
     mocks.detail.mockRejectedValue(new Error('No se puede abrir la compra.'));
     setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No se puede abrir la compra.');
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     mocks.detail.mockResolvedValue(purchase);
@@ -191,7 +193,7 @@ describe('Calendar purchase payments', () => {
     const user = userEvent.setup();
     mocks.detail.mockResolvedValue({ ...purchase, financing: { installments: [{ ...first, canRegisterPayment: false }] } });
     setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta cuota ya no admite esta acción');
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     expect(mocks.pay).not.toHaveBeenCalled();
@@ -204,7 +206,7 @@ describe('Calendar purchase payments', () => {
       mocks.detail.mockResolvedValue(paidPurchase());
     }
     const { client } = setup();
-    await user.click(await screen.findByRole('button', { name: mode === 'edit' ? 'Editar pago de cuota' : 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: mode === 'edit' ? 'Editar pago de cuota' : 'Marcar como pagado' }));
     await screen.findByRole('form');
     act(() => client.setQueryData(['purchases', 'home', 'detail', 'purchase'], mode === 'edit' ? purchase : paidPurchase()));
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta cuota ya no admite esta acción');
@@ -218,8 +220,8 @@ describe('Calendar purchase payments', () => {
     let reject;
     mocks.pay.mockReturnValue(new Promise((_, fail) => { reject = fail; }));
     const { client } = setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
-    await user.click(await screen.findByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar pago' }));
     act(() => client.setQueryData(['purchases', 'home', 'detail', 'purchase'], { ...purchase, paymentMethod: 'UPFRONT', financing: null }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta cuota ya no admite esta acción');
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
@@ -236,7 +238,7 @@ describe('Calendar purchase payments', () => {
     mocks.detail.mockReturnValue(new Promise((_, fail) => { reject = fail; }));
     const { client } = setup();
     client.setQueryData(['purchases', 'home', 'detail', 'purchase'], purchase);
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     expect(screen.getByText('Cargando datos del pago de compra')).toBeInTheDocument();
     expect(screen.queryByLabelText('Importe real (€)')).not.toBeInTheDocument();
     mocks.calendar.mockResolvedValue(calendar([paidEvent({ name: 'Compra personal (histórico)', canAccessPurchase: false, canEditPayment: false })]));
@@ -252,9 +254,9 @@ describe('Calendar purchase payments', () => {
     let reject;
     mocks.pay.mockReturnValue(new Promise((_, fail) => { reject = fail; }));
     setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     await user.type(await screen.findByLabelText('Notas del pago (opcional)'), 'No perder');
-    await user.dblClick(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.dblClick(screen.getByRole('button', { name: 'Guardar pago' }));
     expect(mocks.pay).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Guardando pago…' })).toBeDisabled();
     await act(async () => reject(new Error('No hay conexión.')));
@@ -266,8 +268,8 @@ describe('Calendar purchase payments', () => {
     const user = userEvent.setup();
     mocks.pay.mockRejectedValue(Object.assign(new Error('Existe una cuota anterior pendiente.'), { status: 409 }));
     const { invalidate } = setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
-    await user.click(await screen.findByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar pago' }));
     await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument());
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['calendar', 'home'] });
     expect(mocks.error).toHaveBeenCalledWith('Existe una cuota anterior pendiente.');
@@ -279,9 +281,9 @@ describe('Calendar purchase payments', () => {
     mocks.pay.mockReturnValue(new Promise((done) => { resolve = done; }));
     mocks.calendar.mockResolvedValue(calendar([event, { ...event, purchaseId: 'other-purchase', installmentId: 'i-other', name: 'Otra compra' }]));
     const { client } = setup();
-    const buttons = await screen.findAllByRole('button', { name: 'Marcar pagado' });
+    const buttons = await screen.findAllByRole('button', { name: 'Marcar como pagado' });
     await user.click(buttons[0]);
-    await user.click(await screen.findByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar pago' }));
     mocks.detail.mockResolvedValue({ id: 'other-purchase', financing: { installments: [{ ...first, id: 'i-other' }] } });
     await user.click(buttons[1]);
     const other = await screen.findByRole('form');
@@ -296,12 +298,12 @@ describe('Calendar purchase payments', () => {
     const user = userEvent.setup(); let resolve;
     mocks.pay.mockReturnValue(new Promise((done) => { resolve = done; }));
     const { client, refresh } = setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
-    await user.click(await screen.findByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Guardar pago' }));
     mocks.household.currentHousehold = { id: 'other', currency: 'EUR', timezone: 'Europe/Madrid' };
     mocks.calendar.mockResolvedValue(calendar([]));
     refresh();
-    await screen.findByRole('heading', { name: 'No hay gastos en este periodo' });
+    await screen.findByText('No hay gastos para este mes. Puedes añadirlos desde Gastos.');
     client.removeQueries({ queryKey: ['purchases', 'home', 'detail', 'purchase'], exact: true });
     await act(async () => resolve(paidPurchase()));
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
@@ -315,7 +317,7 @@ describe('Calendar purchase payments', () => {
     let signal;
     mocks.detail.mockImplementation((args) => { signal = args.signal; return new Promise(() => {}); });
     setup();
-    await user.click(await screen.findByRole('button', { name: 'Marcar pagado' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pagado' }));
     expect(signal.aborted).toBe(false);
     await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
     expect(signal.aborted).toBe(true);
@@ -325,7 +327,7 @@ describe('Calendar purchase payments', () => {
   it('validates real payment date and uses mobile bounded inputs and accessible actions', async () => {
     const user = userEvent.setup();
     setup();
-    const button = await screen.findByRole('button', { name: 'Marcar pagado' });
+    const button = await screen.findByRole('button', { name: 'Marcar como pagado' });
     expect(button).toHaveClass('min-h-11');
     button.focus();
     await user.keyboard('{Enter}');
@@ -333,7 +335,7 @@ describe('Calendar purchase payments', () => {
     expect(date).toHaveClass('min-w-0', 'max-w-full');
     expect(date.closest('.date-fields-grid')).toHaveClass('min-w-0');
     fireEvent.change(date, { target: { value: '2026-10-15' } });
-    await user.click(screen.getByRole('button', { name: 'Guardar pago de cuota' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('no puede estar en el futuro');
     expect(mocks.pay).not.toHaveBeenCalled();
   });

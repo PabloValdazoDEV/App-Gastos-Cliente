@@ -4,6 +4,7 @@ import { FormField } from '../auth/components/FormField';
 import { formatCents } from '../finance/money';
 import { purchasePaymentToday } from './purchaseInstallmentFormState';
 import { financingPreview, hasRecordedFinancingPayments, MAX_PURCHASE_INSTALLMENTS, paymentAmountCents } from './purchasePaymentForm';
+import { MoreInfo } from '../../components/ui/MoreInfo';
 
 export function PurchasePaymentFields({ register, watch, errors, disabled, initialPurchase = null, currency = 'EUR', timezone }) {
   const id = useId();
@@ -38,7 +39,7 @@ export function PurchasePaymentFields({ register, watch, errors, disabled, initi
             <FormField disabled={disabled} error={errors.paymentDate?.message} label="Fecha de pago" max={today} type="date" {...register('paymentDate')} />
             <FormField disabled={disabled} error={errors.paidAmount?.message} inputMode="decimal" label={`Importe pagado (${currencyLabel})`} {...register('paidAmount')} />
           </div>
-          <p className="text-sm leading-6 text-text-muted">Al guardar, este importe y esta fecha quedarán registrados como un pago realizado. No se descontará dinero de tus cuentas.</p>
+          <MoreInfo>Al guardar, este importe y esta fecha quedarán registrados como un pago realizado. No se descontará dinero de tus cuentas.</MoreInfo>
         </> : null}
       </div> : <div className="min-w-0 space-y-5">
         <div className="date-fields-grid grid min-w-0 gap-5">
@@ -53,7 +54,7 @@ export function PurchasePaymentFields({ register, watch, errors, disabled, initi
           <label className="flex min-h-12 min-w-0 items-center gap-3 rounded-xl border border-border-strong p-3 text-sm font-semibold">
             <input className="size-5 shrink-0 accent-brand" type="checkbox" {...register('downPaymentPaid')} />La entrada ya está pagada
           </label>
-          {downPaymentPaid ? <div className="date-fields-grid grid min-w-0 gap-5"><FormField disabled={disabled} error={errors.downPaymentPaidAt?.message} label="Fecha de pago de la entrada" max={today} type="date" {...register('downPaymentPaidAt')} /></div> : <p className="text-sm leading-6 text-text-muted">La entrada quedará pendiente hasta que confirmes que está pagada. No se cuenta como una cuota.</p>}
+          {downPaymentPaid ? <div className="date-fields-grid grid min-w-0 gap-5"><FormField disabled={disabled} error={errors.downPaymentPaidAt?.message} label="Fecha de pago de la entrada" max={today} type="date" {...register('downPaymentPaidAt')} /></div> : <MoreInfo>La entrada quedará pendiente hasta que confirmes que está pagada. No se cuenta como una cuota.</MoreInfo>}
         </div> : null}
         <section aria-labelledby={`${id}-summary`} className="min-w-0 space-y-3 rounded-xl bg-surface-muted p-4">
           <h3 className="font-extrabold" id={`${id}-summary`}>Resumen de financiación</h3>
@@ -65,7 +66,7 @@ export function PurchasePaymentFields({ register, watch, errors, disabled, initi
             ].map(([label, cents]) => <div className="min-w-0" key={label}><dt className="text-sm text-text-muted">{label}</dt><dd className="min-w-0 break-words font-extrabold tabular-nums [overflow-wrap:anywhere]">{formatCents(cents, currency)}</dd></div>)}
           </dl>
           {preview.lastInstallmentCents > 0 && preview.lastInstallmentCents !== preview.installmentAmountCents ? <p aria-live="polite" className="border-t border-border pt-3 text-sm leading-6">Última cuota ajustada: <strong className="tabular-nums">{formatCents(preview.lastInstallmentCents, currency)}</strong>. Así no se pierde ningún céntimo.</p> : null}
-          <p className="text-xs leading-5 text-text-muted">El coste total final es la entrada más las cuotas. El coste de financiación es la diferencia respecto al precio de compra.</p>
+          <MoreInfo>El coste total final es la entrada más las cuotas. El coste de financiación es la diferencia respecto al precio de compra.</MoreInfo>
         </section>
       </div>}
     </fieldset>

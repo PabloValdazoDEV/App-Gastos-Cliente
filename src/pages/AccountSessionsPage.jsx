@@ -11,6 +11,7 @@ import {
 import { AuthError } from '../features/auth/components/AuthFeedback';
 import { ErrorState, LoadingState } from '../components/ui/FeedbackStates';
 import { PageHeader } from '../components/ui/PageHeader';
+import { MoreInfo } from '../components/ui/MoreInfo';
 
 function formatDate(value) {
   if (!value) return 'Sin actividad registrada';
@@ -102,9 +103,9 @@ export function AccountSessionsPage() {
             <h2 className="text-xl font-extrabold tracking-tight" id="sesiones-activas">
               Sesiones activas
             </h2>
-            <p className="mt-1 text-sm leading-6 text-text-muted">
+            <MoreInfo className="mt-1">
               Las fechas reflejan la última actividad conocida por el servidor.
-            </p>
+            </MoreInfo>
           </div>
           <button
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 bg-surface px-4 py-2.5 text-sm font-bold text-red-800 transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-60"
