@@ -131,10 +131,7 @@ function MonthPlanning({ currentHousehold, month }) {
       ) : (
         <section className="rounded-3xl border border-border bg-surface p-5 shadow-card sm:p-7" aria-labelledby="confirmar-saldos">
           <h2 className="text-lg font-bold" id="confirmar-saldos">Preparar las transferencias de {planningMonthLabel(month)}</h2>
-          <MoreInfo className="mt-2">
-            Revisa la previsión del día 1 al último día del mes que vas a financiar. Guarda el cálculo antes de confirmar las transferencias. No se consulta tu banco ni se mueve dinero.
-          </MoreInfo>
-          <MoreInfo className="mt-2">Los saldos se registran como referencia de cobertura: no se descuentan automáticamente de esta aportación, porque pueden estar reservados para otros pagos o para el colchón. Las medias variables usan meses terminados; cuando faltan 3 días o menos para acabar el mes, también incluyen su gasto registrado como cierre estimado para preparar el siguiente.</MoreInfo>
+          <MoreInfo className="mt-2"><p>Revisa la previsión del día 1 al último día del mes que vas a financiar. Guarda el cálculo antes de confirmar las transferencias. No se consulta tu banco ni se mueve dinero.</p><p className="mt-2">Los saldos se registran como referencia de cobertura: no se descuentan automáticamente de esta aportación, porque pueden estar reservados para otros pagos o para el colchón. Las medias variables usan meses terminados; cuando faltan 3 días o menos para acabar el mes, también incluyen su gasto registrado como cierre estimado para preparar el siguiente.</p></MoreInfo>
           <dl className="mt-5 grid gap-3 rounded-2xl bg-surface-muted p-4 sm:grid-cols-3">
             <div>
               <dt className="text-xs font-semibold text-text-muted">Previsión conjunta y tus gastos personales</dt>

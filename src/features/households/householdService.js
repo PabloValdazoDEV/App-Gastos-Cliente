@@ -20,6 +20,8 @@ export const householdService = {
     http.patch(`/households/${householdId}/categories/${categoryId}`, body),
   archiveCategory: ({ householdId, categoryId }) =>
     http.post(`/households/${householdId}/categories/${categoryId}/archive`, {}),
+  restoreCategory: ({ householdId, categoryId }) =>
+    http.post(`/households/${householdId}/categories/${categoryId}/restore`, {}),
   deleteCategory: ({ householdId, categoryId }) =>
     http.delete(`/households/${householdId}/categories/${categoryId}`),
   listInvitations: (householdId) =>

@@ -4,6 +4,7 @@ import {
   Check,
   Pencil,
   Plus,
+  RotateCcw,
   Tags,
   Trash2,
   X,
@@ -189,9 +190,11 @@ function CategoryRow({
   householdMarginBps,
   isArchiving,
   isDeleting,
+  isRestoring,
   onArchive,
   onDelete,
   onEdit,
+  onRestore,
 }) {
   const marginLabel = Number.isInteger(category.safetyMarginBps)
     ? `${category.safetyMarginBps / 100} % propio`
@@ -239,17 +242,30 @@ function CategoryRow({
                   {isArchiving ? 'Archivando…' : 'Archivar'}
                 </button>
               </>
-            ) : canDelete ? (
-              <button
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 bg-surface px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60"
-                disabled={isDeleting}
-                onClick={onDelete}
-                type="button"
-              >
-                <Trash2 aria-hidden="true" className="size-4" />
-                {isDeleting ? 'Eliminando…' : 'Eliminar definitivamente'}
-              </button>
-            ) : null}
+            ) : (
+              <>
+                <button
+                  className={secondaryButton}
+                  disabled={isRestoring}
+                  onClick={onRestore}
+                  type="button"
+                >
+                  <RotateCcw aria-hidden="true" className="size-4" />
+                  {isRestoring ? 'Restaurando…' : 'Restaurar'}
+                </button>
+                {canDelete ? (
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 bg-surface px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60"
+                    disabled={isDeleting}
+                    onClick={onDelete}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" className="size-4" />
+                    {isDeleting ? 'Eliminando…' : 'Eliminar definitivamente'}
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         ) : null}
       </div>
@@ -297,6 +313,13 @@ export function CategoryManager({ household }) {
       toast.success('Categoría archivada; el histórico se conserva.');
     },
   });
+  const restoreCategory = useMutation({
+    mutationFn: householdService.restoreCategory,
+    onSuccess: async () => {
+      await invalidateCategories();
+      toast.success('Categoría restaurada: vuelve a estar disponible.');
+    },
+  });
   const deleteCategory = useMutation({
     mutationFn: householdService.deleteCategory,
     onSuccess: async () => {
@@ -312,6 +335,7 @@ export function CategoryManager({ household }) {
     createCategory.error ??
     updateCategory.error ??
     archiveCategory.error ??
+    restoreCategory.error ??
     deleteCategory.error;
 
   return (
@@ -398,6 +422,14 @@ export function CategoryManager({ household }) {
                   isDeleting={
                     deleteCategory.isPending && deleteCategory.variables?.categoryId === category.id
                   }
+                  isRestoring={
+                    restoreCategory.isPending && restoreCategory.variables?.categoryId === category.id
+                  }
+                  onRestore={() => {
+                    setArchiveConfirmationId(null);
+                    setDeleteConfirmationId(null);
+                    restoreCategory.mutate({ householdId: household.id, categoryId: category.id });
+                  }}
                   onArchive={() => {
                     setDeleteConfirmationId(null);
                     setArchiveConfirmationId(category.id);

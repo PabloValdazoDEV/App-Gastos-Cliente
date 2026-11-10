@@ -87,8 +87,10 @@ export function CashCoverage({ coverage, currency, title }) {
             ))}
           </dl>
           <p className={`mt-5 break-words font-bold ${isShortfall ? 'text-amber-900' : 'text-brand-strong'}`}>{isShortfall ? `Faltan ${formatCents(coverage.shortfallCents, currency)} para cubrir el presupuesto restante` : 'El saldo cubre el presupuesto restante'}</p>
-          <MoreInfo className="mt-3">Compara el saldo registrado con el presupuesto restante del mes. No descuenta las reservas para futuros pagos ni los gastos sin registrar: el saldo sobrante no es necesariamente dinero libre.</MoreInfo>
-          {coverage.balanceSource === 'MONTHLY_PLANNING' ? <MoreInfo className="mt-2">Se utiliza el saldo confirmado al preparar el mes; revísalo si ha cambiado.</MoreInfo> : null}
+          <MoreInfo className="mt-3">
+            <p>Compara el saldo registrado con el presupuesto restante del mes. No descuenta las reservas para futuros pagos ni los gastos sin registrar: el saldo sobrante no es necesariamente dinero libre.</p>
+            {coverage.balanceSource === 'MONTHLY_PLANNING' ? <p className="mt-2">Se utiliza el saldo confirmado al preparar el mes; revísalo si ha cambiado.</p> : null}
+          </MoreInfo>
         </>
       )}
     </section>

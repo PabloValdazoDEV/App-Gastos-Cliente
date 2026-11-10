@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   createCategory: vi.fn(),
   deleteCategory: vi.fn(),
   listCategories: vi.fn(),
+  restoreCategory: vi.fn(),
   updateCategory: vi.fn(),
 }));
 
@@ -65,6 +66,7 @@ describe('CategoryManager', () => {
     mocks.updateCategory.mockResolvedValue({ id: 'category-1' });
     mocks.archiveCategory.mockResolvedValue({ id: 'category-1' });
     mocks.deleteCategory.mockResolvedValue({ deleted: true, id: 'category-2' });
+    mocks.restoreCategory.mockResolvedValue({ id: 'category-2', archivedAt: null });
   });
 
   it('crea una categoría con icono, color y margen específico', async () => {
@@ -139,6 +141,20 @@ describe('CategoryManager', () => {
         categoryId: 'category-2',
       }),
     );
+  });
+
+  it.each(['ADMIN', 'OWNER'])('%s puede restaurar una categoría archivada', async (role) => {
+    const user = userEvent.setup();
+    renderManager(role);
+
+    await user.click(await screen.findByRole('button', { name: 'Restaurar' }));
+
+    await waitFor(() => expect(mocks.restoreCategory).toHaveBeenCalledWith({
+      householdId: 'household-1',
+      categoryId: 'category-2',
+    }));
+    // The list is reloaded so the category shows as active again.
+    await waitFor(() => expect(mocks.listCategories.mock.calls.length).toBeGreaterThan(1));
   });
 
   it('mantiene la gestión en solo lectura para miembros', async () => {

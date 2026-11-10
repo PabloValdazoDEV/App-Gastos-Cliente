@@ -195,19 +195,65 @@ function emitSessionExpired() {
   }
 }
 
-const refreshClient = axios.create({
+// Exported only so tests can stub its transport.
+export const refreshClient = axios.create({
   baseURL: publicEnv.apiUrl,
   headers: { Accept: 'application/json' },
   timeout: API_TIMEOUT_MS,
   withCredentials: true,
 });
 
-const refreshSession = createSingleFlight(() =>
-  refreshClient.post('/auth/refresh', null, attachCsrfToken({
+function isCsrfRejection(error) {
+  return error?.response?.status === 403 && error.response.data?.code === 'CSRF_TOKEN_INVALID';
+}
+
+// The CSRF token expires after 24 h on the server. A tab left open longer
+// gets a fresh one transparently instead of failing every save.
+const fetchFreshCsrfToken = createSingleFlight(async () => {
+  const response = await refreshClient.get('/auth/csrf');
+  const token = response.data?.data?.csrfToken ?? response.data?.csrfToken;
+  if (!token) throw new Error('El servidor no ha entregado un token CSRF válido.');
+  setCsrfToken(token);
+  return token;
+});
+
+function postRefresh() {
+  return refreshClient.post('/auth/refresh', null, attachCsrfToken({
     headers: {},
     method: 'post',
-  })),
+  }));
+}
+
+/*
+ * Two tabs refreshing at the same moment used to send the same refresh token
+ * twice: the server sees it as token reuse and logs both tabs out. The Web
+ * Locks API serializes refreshes across tabs; as cookies are shared, the
+ * second tab's request already carries the rotated cookie.
+ */
+function withCrossTabRefreshLock(operation) {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks?.request) return operation();
+  return locks.request('budgetapp-auth-refresh', operation);
+}
+
+const refreshSession = createSingleFlight(() =>
+  withCrossTabRefreshLock(async () => {
+    try {
+      return await postRefresh();
+    } catch (error) {
+      if (!isCsrfRejection(error)) throw error;
+      await fetchFreshCsrfToken();
+      return postRefresh();
+    }
+  }),
 );
+
+// Only a rejected session means "logged out". Rate limits (429), server
+// errors and lost connections keep the user signed in and can be retried.
+function sessionWasRejected(error) {
+  const status = error?.response?.status;
+  return status === 401 || (status === 403 && !isCsrfRejection(error));
+}
 
 export const apiClient = axios.create({
   baseURL: publicEnv.apiUrl,
@@ -232,6 +278,16 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
+    if (isCsrfRejection(error) && error.config && !error.config._retryAfterCsrf) {
+      error.config._retryAfterCsrf = true;
+      try {
+        await fetchFreshCsrfToken();
+      } catch {
+        return Promise.reject(await toApiErrorWithBlob(error));
+      }
+      return apiClient.request(error.config);
+    }
+
     if (!shouldRefreshSession(error)) {
       return Promise.reject(await toApiErrorWithBlob(error));
     }
@@ -243,7 +299,7 @@ apiClient.interceptors.response.use(
       sessionExpiredEmitted = false;
       return apiClient.request(error.config);
     } catch (refreshError) {
-      emitSessionExpired();
+      if (sessionWasRejected(refreshError)) emitSessionExpired();
       return Promise.reject(await toApiErrorWithBlob(refreshError));
     }
   },
