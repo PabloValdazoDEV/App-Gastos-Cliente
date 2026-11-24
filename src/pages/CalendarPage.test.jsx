@@ -81,6 +81,35 @@ describe('Calendario interactivo', () => {
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
+
+  it('en el mes actual muestra lo pendiente hasta hoy bajo los días, listo para pagar', async () => {
+    mocks.calendar.mockResolvedValue(calendar([
+      occurrence({ expenseId: 'late', name: 'Luz', dueDate: '2026-09-05', status: 'OVERDUE' }),
+      occurrence({ expenseId: 'today', name: 'Agua', dueDate: '2026-09-17' }),
+      occurrence({ expenseId: 'later', name: 'Seguro', dueDate: '2026-09-25' }),
+      registered({ expenseId: 'paid', name: 'Internet', dueDate: '2026-09-02' }),
+    ]));
+    renderPage({ view: 'CALENDAR' });
+
+    const pending = (await screen.findByRole('heading', { name: 'Pendiente hasta hoy' })).closest('section');
+    expect(within(pending).getByRole('heading', { name: 'Luz' })).toBeVisible();
+    expect(within(pending).getByRole('heading', { name: 'Agua' })).toBeVisible();
+    expect(within(pending).queryByRole('heading', { name: 'Seguro' })).not.toBeInTheDocument();
+    expect(within(pending).queryByRole('heading', { name: 'Internet' })).not.toBeInTheDocument();
+    expect(within(pending).getAllByRole('button', { name: 'Marcar como pagado' })).toHaveLength(2);
+  });
+
+  it('un vencimiento que aún no se puede pagar explica por qué y lleva a Inicio', async () => {
+    mocks.calendar.mockResolvedValue(calendar([
+      occurrence({ expenseId: 'srv', name: 'Servidor', dueDate: '2026-09-05', status: 'OVERDUE', canRegisterPayment: false }),
+    ]));
+    renderPage({ view: 'CALENDAR' });
+
+    const pending = (await screen.findByRole('heading', { name: 'Pendiente hasta hoy' })).closest('section');
+    expect(within(pending).getByText(/Antes hay un vencimiento anterior sin pagar/)).toBeVisible();
+    expect(within(pending).getByRole('link', { name: 'Pagarlos desde Inicio' })).toHaveAttribute('href', '/dashboard');
+    expect(within(pending).queryByRole('button', { name: 'Marcar como pagado' })).not.toBeInTheDocument();
+  });
   it('navigates previous and next full months and returns to this month', async () => {
     const user = userEvent.setup();
     renderPage();
@@ -493,7 +522,7 @@ describe('Calendario interactivo', () => {
     expect(screen.getByRole('button', { name: 'Este mes' })).toHaveAttribute('aria-pressed', 'false');
     await waitFor(() => expect(mocks.calendar).toHaveBeenCalledWith('household-1', 'MONTH', '2026-10-01'));
     for (const name of ['Mes anterior', 'Este mes', 'Mes siguiente']) expect(screen.getByRole('button', { name })).toHaveClass('min-h-12');
-    expect(screen.getByRole('group', { name: 'Cambiar mes' })).toHaveClass('grid-cols-3');
+    expect(screen.getByRole('group', { name: 'Cambiar mes' })).toHaveClass('flex');
   });
 
   it('un refresco externo que resuelve el vencimiento cierra el borrador y restaura el foco', async () => {

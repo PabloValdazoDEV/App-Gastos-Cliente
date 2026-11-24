@@ -12,10 +12,37 @@ import { daysBetween, dueLabel, viewerContribution } from '../homeSummary';
 
 const secondaryLink = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-border-strong px-4 py-2 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
-export function ContributionCard({ data, month, monthLabel }) {
+export function ContributionCard({ data, month, monthLabel, nextMonth, nextMonthLabel }) {
   const contribution = viewerContribution(data);
-  if (!contribution) return null;
   const currency = data.household.currency;
+  const planning = data.planning;
+  const nextLink = nextMonth ? (
+    <Link className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-brand-strong underline-offset-2 hover:underline" to={`/planificacion?mes=${nextMonth}`}>
+      Preparar {nextMonthLabel}
+    </Link>
+  ) : null;
+
+  const extrasPending = planning?.extraFunding?.pendingCents > 0;
+  const notices = (
+    <>
+      {extrasPending ? <p className="mt-1 text-sm font-semibold" role="status">Hay aportaciones extra pendientes de ingresar.</p> : null}
+      {planning?.budgetChangedSincePreparation ? <p className="mt-1 text-sm text-text-muted" role="status">Los gastos han cambiado desde que lo preparaste; revisa las diferencias en Planificación.</p> : null}
+    </>
+  );
+
+  if (!contribution) {
+    return (
+      <section aria-labelledby="my-contribution-heading" className="min-w-0 rounded-2xl border border-brand/30 bg-brand-soft p-5">
+        <h2 className="text-sm font-bold text-brand-strong" id="my-contribution-heading">Aportaciones de {monthLabel}</h2>
+        <p className="mt-1 text-sm leading-6 text-text-muted">Se calculan en Planificación.</p>
+        {notices}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Link className={`${secondaryLink} bg-surface`} to={`/planificacion?mes=${month}`}>{planning ? 'Ver aportaciones' : 'Preparar el mes'}</Link>
+          {nextLink}
+        </div>
+      </section>
+    );
+  }
   const pending = contribution.pendingCents;
 
   return (
@@ -29,44 +56,64 @@ export function ContributionCard({ data, month, monthLabel }) {
             : 'Ya está todo ingresado. ¡Listo este mes!'
           : 'Estimación con los gastos de hoy. Se fija al preparar el mes.'}
       </p>
-      <Link className={`mt-3 ${secondaryLink} bg-surface`} to={`/planificacion?mes=${month}`}>
-        {contribution.prepared ? 'Ver detalle' : 'Preparar el mes'}
-      </Link>
+      {notices}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Link className={`${secondaryLink} bg-surface`} to={`/planificacion?mes=${month}`}>
+          {contribution.prepared ? 'Ver detalle' : 'Preparar el mes'}
+        </Link>
+        {nextLink}
+      </div>
     </section>
   );
 }
 
-function payBody(payment, today) {
+function payBody(payment, dueDate, today) {
   return {
     status: 'PAID',
     actualAmountCents: payment.amountCents,
     paymentDate: today,
     notes: null,
-    dueDate: payment.dueDate.slice(0, 10),
+    dueDate: dueDate.slice(0, 10),
     expectedAmountCents: payment.amountCents,
     nextAmountDecision: 'KEEP_PREVIOUS',
     nextExpectedAmountCents: null,
   };
 }
 
+const primaryButton = 'inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+const textButton = 'inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-brand-strong underline-offset-2 hover:underline disabled:opacity-60';
+
 function DuePaymentRow({ currency, householdId, payment, today }) {
   const queryClient = useQueryClient();
   const [paid, setPaid] = useState(false);
   const recurring = payment.sourceType === 'RECURRING_EXPENSE';
   const overdue = daysBetween(today, payment.dueDate) < 0;
+  // Several unpaid months of the same expense are shown as one row.
+  const pendingDates = recurring && payment.pendingDueDates?.length ? payment.pendingDueDates : [payment.dueDate];
+  const count = pendingDates.length;
   const pay = useMutation({
-    mutationFn: () => financeService.registerPayment({
-      householdId,
-      expenseId: payment.expenseId,
-      body: payBody(payment, today),
-    }),
-    onSuccess: async () => {
-      setPaid(true);
-      // Name the occurrence: with several overdue months the row reappears with the next date.
-      toast.success(`${payment.name}: pagado el del ${formatCivilDate(payment.dueDate)} (${formatCents(payment.amountCents, currency)}).`);
+    // The server only accepts the oldest unpaid occurrence, so pay them in order.
+    mutationFn: async (dates) => {
+      for (const dueDate of dates) {
+        await financeService.registerPayment({
+          householdId,
+          expenseId: payment.expenseId,
+          body: payBody(payment, dueDate, today),
+        });
+      }
+      return dates;
+    },
+    onSuccess: async (dates) => {
+      setPaid(dates.length === count);
+      toast.success(dates.length > 1
+        ? `${payment.name}: pagados ${dates.length} vencimientos (${formatCents(payment.amountCents * dates.length, currency)}).`
+        : `${payment.name}: pagado el del ${formatCivilDate(dates[0])} (${formatCents(payment.amountCents, currency)}).`);
       await invalidateBudgetQueries(queryClient, householdId);
     },
-    onError: (error) => toast.error(error.message || 'No se pudo marcar como pagado.'),
+    onError: async (error) => {
+      toast.error(error.message || 'No se pudo marcar como pagado.');
+      await invalidateBudgetQueries(queryClient, householdId);
+    },
   });
 
   return (
@@ -76,10 +123,15 @@ function DuePaymentRow({ currency, householdId, payment, today }) {
         <p className="break-words font-bold">{payment.name}</p>
         <p className={`text-sm ${overdue ? 'font-semibold text-red-700' : 'text-text-muted'}`}>
           {overdue ? <AlertTriangle aria-hidden="true" className="mr-1 inline size-4 align-[-3px]" /> : null}
-          {dueLabel(payment.dueDate, today)} · {formatCivilDate(payment.dueDate)}
+          {count > 1
+            ? `${count} vencimientos sin pagar · desde el ${formatCivilDate(payment.dueDate)}`
+            : `${dueLabel(payment.dueDate, today)} · ${formatCivilDate(payment.dueDate)}`}
         </p>
       </div>
-      <p className="font-extrabold tabular-nums">{formatCents(payment.amountCents, currency)}</p>
+      <p className="text-right font-extrabold tabular-nums">
+        {formatCents(payment.amountCents * count, currency)}
+        {count > 1 ? <span className="block text-xs font-semibold text-text-muted">{count} × {formatCents(payment.amountCents, currency)}</span> : null}
+      </p>
       {paid ? (
         <span className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-bold text-brand-strong" role="status">
           <Check aria-hidden="true" className="size-4" />Pagado
@@ -87,21 +139,35 @@ function DuePaymentRow({ currency, householdId, payment, today }) {
       ) : recurring ? (
         <div className="flex flex-wrap gap-2">
           <button
-            aria-label={`Marcar ${payment.name} como pagado hoy por ${formatCents(payment.amountCents, currency)}`}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            aria-label={count > 1
+              ? `Marcar los ${count} vencimientos de ${payment.name} como pagados hoy por ${formatCents(payment.amountCents * count, currency)}`
+              : `Marcar ${payment.name} como pagado hoy por ${formatCents(payment.amountCents, currency)}`}
+            className={primaryButton}
             disabled={pay.isPending}
-            onClick={() => pay.mutate()}
+            onClick={() => pay.mutate(pendingDates)}
             type="button"
           >
-            <Check aria-hidden="true" className="size-4" />{pay.isPending ? 'Guardando…' : 'Pagado'}
+            <Check aria-hidden="true" className="size-4" />
+            {pay.isPending ? 'Guardando…' : count > 1 ? `Pagar los ${count}` : 'Pagado'}
           </button>
-          <Link
-            aria-label={`Pagar ${payment.name} con otro importe o fecha`}
-            className="inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-brand-strong underline-offset-2 hover:underline"
-            to={`/gastos/recurrentes/${payment.expenseId}`}
-          >
-            Otro importe
-          </Link>
+          {count > 1 ? (
+            <button
+              className={textButton}
+              disabled={pay.isPending}
+              onClick={() => pay.mutate(pendingDates.slice(0, 1))}
+              type="button"
+            >
+              Solo el del {formatCivilDate(payment.dueDate)}
+            </button>
+          ) : (
+            <Link
+              aria-label={`Pagar ${payment.name} con otro importe o fecha`}
+              className={textButton}
+              to={`/gastos/recurrentes/${payment.expenseId}`}
+            >
+              Otro importe
+            </Link>
+          )}
         </div>
       ) : payment.purchaseId ? (
         <Link className={secondaryLink} to={`/compras/${payment.purchaseId}`}>Ver cuota</Link>

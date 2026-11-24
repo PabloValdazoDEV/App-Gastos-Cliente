@@ -173,25 +173,35 @@ function MonthPlanning({ currentHousehold, month }) {
               }
             }}
           >
-            <div>
-              <label className="text-sm font-bold" htmlFor="planning-balance">Saldo de la cuenta conjunta</label>
-              <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="planning-balance" inputMode="decimal" onChange={(event) => setBalance(event.target.value)} required value={balance} />
-            </div>
-            {people.map((person) => (
-              <div key={person.personId}>
-                <label className="text-sm font-bold" htmlFor={`planning-balance-${person.personId}`}>
-                  Saldo personal de {person.personName}
-                </label>
-                <input
-                  className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3"
-                  id={`planning-balance-${person.personId}`}
-                  inputMode="decimal"
-                  onChange={(event) => setPersonalBalances((current) => ({ ...current, [person.personId]: event.target.value }))}
-                  required
-                  value={personalBalances[person.personId] ?? ''}
-                />
+            {/* Balances come from Cuentas: show them as one line and only open the inputs to correct them. */}
+            <details className="rounded-2xl border border-border p-3 sm:col-span-2">
+              <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                <span className="font-bold">Saldos de Cuentas:</span>
+                <span className="text-text-muted">conjunta {balance || '0,00'} €{people.map((person) => ` · ${person.personName} ${personalBalances[person.personId] || '0,00'} €`).join('')}</span>
+                <span className="font-bold text-brand-strong underline">Corregir</span>
+              </summary>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-bold" htmlFor="planning-balance">Saldo de la cuenta conjunta</label>
+                  <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="planning-balance" inputMode="decimal" onChange={(event) => setBalance(event.target.value)} required value={balance} />
+                </div>
+                {people.map((person) => (
+                  <div key={person.personId}>
+                    <label className="text-sm font-bold" htmlFor={`planning-balance-${person.personId}`}>
+                      Saldo personal de {person.personName}
+                    </label>
+                    <input
+                      className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3"
+                      id={`planning-balance-${person.personId}`}
+                      inputMode="decimal"
+                      onChange={(event) => setPersonalBalances((current) => ({ ...current, [person.personId]: event.target.value }))}
+                      required
+                      value={personalBalances[person.personId] ?? ''}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </details>
             <div className="sm:col-span-2">
               <button className="min-h-12 rounded-xl bg-brand px-5 py-3 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60" disabled={prepare.isPending} type="submit">
                 {prepare.isPending ? 'Guardando…' : 'Guardar previsión del mes'}

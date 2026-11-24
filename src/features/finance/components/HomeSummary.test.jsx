@@ -81,6 +81,38 @@ describe('Inicio: pagos de hoy y atrasados', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Pagado');
   });
 
+  it('agrupa varios meses atrasados del mismo gasto y los paga en orden', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<DuePaymentsCard
+      data={{ household, calculationDate: '2026-11-24', upcomingPayments: [
+        { sourceType: 'RECURRING_EXPENSE', expenseId: 'srv', name: 'Servidor', dueDate: '2026-09-05', pendingDueDates: ['2026-09-05', '2026-10-05', '2026-11-05'], amountCents: 1_800 },
+      ] }}
+      householdId="household-1"
+    />);
+
+    expect(screen.getByText('3 vencimientos sin pagar · desde el 5 sept 2026')).toBeInTheDocument();
+    expect(screen.getByText('54,00 €', { exact: false })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Marcar los 3 vencimientos de Servidor como pagados/ }));
+
+    await waitFor(() => expect(mocks.registerPayment).toHaveBeenCalledTimes(3));
+    expect(mocks.registerPayment.mock.calls.map(([call]) => call.body.dueDate)).toEqual(['2026-09-05', '2026-10-05', '2026-11-05']);
+    expect(await screen.findByRole('status')).toHaveTextContent('Pagado');
+  });
+
+  it('con varios atrasados permite pagar solo el más antiguo', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<DuePaymentsCard
+      data={{ household, calculationDate: '2026-11-24', upcomingPayments: [
+        { sourceType: 'RECURRING_EXPENSE', expenseId: 'srv', name: 'Servidor', dueDate: '2026-09-05', pendingDueDates: ['2026-09-05', '2026-10-05'], amountCents: 1_800 },
+      ] }}
+      householdId="household-1"
+    />);
+
+    await user.click(screen.getByRole('button', { name: 'Solo el del 5 sept 2026' }));
+    await waitFor(() => expect(mocks.registerPayment).toHaveBeenCalledTimes(1));
+    expect(mocks.registerPayment.mock.calls[0][0].body.dueDate).toBe('2026-09-05');
+  });
+
   it('las cuotas de compras llevan a su detalle y los próximos días solo se listan', () => {
     renderWithClient(<DuePaymentsCard data={data} householdId="household-1" />);
     expect(screen.getByRole('link', { name: 'Ver cuota' })).toHaveAttribute('href', '/compras/tv');

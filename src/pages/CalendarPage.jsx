@@ -222,6 +222,13 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
           )}
         </div>
       ) : null}
+      {/* Unpaid but not payable yet: the server only accepts the oldest pending occurrence. */}
+      {recurring && !event.paymentId && event.canRegisterPayment === false && ['OVERDUE', 'UPCOMING'].includes(event.status) ? (
+        <p className="mt-3 text-sm text-text-muted">
+          Antes hay un vencimiento anterior sin pagar.{' '}
+          <Link className="inline-flex min-h-11 items-center font-bold text-brand-strong underline" to="/dashboard">Pagarlos desde Inicio</Link>
+        </p>
+      ) : null}
       {canConfirmRecordedPayment ? <RecordedPaymentControl event={event} householdId={householdId} timezone={timezone} /> : null}
       {purchaseSource && event.canAccessPurchase === true && event.purchaseId ? <Link aria-label={`Ver compra: ${event.name}`} className="mt-3 inline-flex min-h-11 max-w-full items-center rounded-lg px-1 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to={`/compras/${encodeURIComponent(event.purchaseId)}`}>Ver compra</Link> : null}
       {source ? <Link className="mt-3 inline-flex min-h-11 max-w-full items-center rounded-lg px-1 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to={source.to}>{source.link}</Link> : null}
@@ -306,6 +313,11 @@ function HouseholdCalendar({ currentHousehold }) {
   const days = useMemo(() => calendarDays(month), [month]);
   const monthlyUnscheduledEvents = monthEvents.filter((event) => event.datePrecision === 'MONTH');
   const selectedEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
+  const today = calendarToday(currentHousehold.timezone ?? 'UTC');
+  // What is due today or overdue this month, ready to pay without opening a day.
+  const pendingUntilToday = month === currentMonth
+    ? monthEvents.filter((event) => event.datePrecision !== 'MONTH' && event.dueDate <= today && !['PAID', 'SKIPPED'].includes(event.status))
+    : [];
 
   const selectPayment = useCallback((nextSelection) => {
     selectionRef.current = nextSelection;
@@ -356,31 +368,40 @@ function HouseholdCalendar({ currentHousehold }) {
   }, [closePayment, query.data, query.isError, selection]);
 
   return (
-    <div className="min-w-0 space-y-6 focus:outline-none" ref={calendarRef} tabIndex={-1}>
-      <PageHeader title="Calendario" />
-      <MoreInfo>Todos los gastos del periodo: recurrentes, facturas, variables, puntuales y pagos de compras. Incluye los gastos comunes y tus gastos personales.</MoreInfo>
-      <section aria-label="Mes del calendario" className="min-w-0 rounded-2xl border border-border bg-surface p-4">
-        <div className="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-w-0 space-y-4 focus:outline-none" ref={calendarRef} tabIndex={-1}>
+      <PageHeader title="Calendario" description="Todos los gastos del periodo: recurrentes, facturas, variables, puntuales y pagos de compras. Incluye los gastos comunes y tus gastos personales." />
+      {/* One compact block: month, scope and view, so the days are visible without scrolling. */}
+      <section aria-label="Mes del calendario" className="min-w-0 space-y-3 rounded-2xl border border-border bg-surface p-3 sm:p-4">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <h2 aria-live="polite" aria-atomic="true" className="text-lg font-bold first-letter:uppercase">{formatDate(`${month}-01`, true)}</h2>
-          <div className="grid w-full grid-cols-3 gap-1 sm:w-auto sm:gap-2" role="group" aria-label="Cambiar mes">
-            <button aria-label="Mes anterior" className={`${monthAction} border-border-strong hover:bg-surface-muted`} disabled={month <= '2000-01'} onClick={() => changeMonth(shiftCalendarMonth(month, -1))} type="button"><ChevronLeft aria-hidden="true" className="size-4 shrink-0" /><span>Anterior</span></button>
-            <button aria-pressed={month === currentMonth} className={`${monthAction} ${month === currentMonth ? 'border-brand bg-brand text-on-brand hover:bg-brand-hover' : 'border-border-strong hover:bg-surface-muted'}`} onClick={() => changeMonth(currentMonth)} type="button">Este mes</button>
-            <button aria-label="Mes siguiente" className={`${monthAction} border-border-strong hover:bg-surface-muted`} disabled={month >= '2200-12'} onClick={() => changeMonth(shiftCalendarMonth(month, 1))} type="button"><ChevronRight aria-hidden="true" className="size-4 shrink-0 sm:order-last" /><span>Siguiente</span></button>
+          <div className="flex gap-1 sm:gap-2" role="group" aria-label="Cambiar mes">
+            <button aria-label="Mes anterior" className={`${monthAction} w-12 border-border-strong hover:bg-surface-muted`} disabled={month <= '2000-01'} onClick={() => changeMonth(shiftCalendarMonth(month, -1))} type="button"><ChevronLeft aria-hidden="true" className="size-5 shrink-0" /></button>
+            <button aria-pressed={month === currentMonth} className={`${monthAction} px-3 ${month === currentMonth ? 'border-brand bg-brand text-on-brand hover:bg-brand-hover' : 'border-border-strong hover:bg-surface-muted'}`} onClick={() => changeMonth(currentMonth)} type="button">Este mes</button>
+            <button aria-label="Mes siguiente" className={`${monthAction} w-12 border-border-strong hover:bg-surface-muted`} disabled={month >= '2200-12'} onClick={() => changeMonth(shiftCalendarMonth(month, 1))} type="button"><ChevronRight aria-hidden="true" className="size-5 shrink-0" /></button>
+          </div>
+        </div>
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[3fr_2fr]">
+          <div aria-label="Filtrar gastos por ámbito" className="grid w-full grid-cols-3 rounded-xl border border-border bg-surface-muted p-1" role="group">
+            {calendarScopes.map(([value, label]) => <button aria-pressed={scope === value} className={`inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${scope === value ? 'bg-brand text-on-brand' : 'text-text-muted hover:bg-surface'}`} key={value} onClick={() => changeScope(value)} type="button">{label}</button>)}
+          </div>
+          <div aria-label="Vista de gastos" className="grid w-full grid-cols-2 rounded-xl border border-border bg-surface-muted p-1" role="group">
+            {calendarModes.map(([value, label]) => <button aria-pressed={mode === value} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${mode === value ? 'bg-brand text-on-brand' : 'text-text-muted hover:bg-surface'}`} key={value} onClick={() => setMode(value)} type="button">
+              {value === 'CALENDAR' ? <CalendarDays aria-hidden="true" className="size-4" /> : <List aria-hidden="true" className="size-4" />}{label}
+            </button>)}
           </div>
         </div>
       </section>
-      <div aria-label="Filtrar gastos por ámbito" className="grid w-full grid-cols-3 rounded-xl border border-border bg-surface p-1" role="group">
-        {calendarScopes.map(([value, label]) => <button aria-pressed={scope === value} className={`inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${scope === value ? 'bg-brand text-on-brand' : 'text-text-muted hover:bg-surface-muted'}`} key={value} onClick={() => changeScope(value)} type="button">{label}</button>)}
-      </div>
-      <div aria-label="Vista de gastos" className="grid w-full grid-cols-2 rounded-xl border border-border bg-surface p-1" role="group">
-        {calendarModes.map(([value, label]) => <button aria-pressed={mode === value} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${mode === value ? 'bg-brand text-on-brand' : 'text-text-muted hover:bg-surface-muted'}`} key={value} onClick={() => setMode(value)} type="button">
-          {value === 'CALENDAR' ? <CalendarDays aria-hidden="true" className="size-4" /> : <List aria-hidden="true" className="size-4" />}{label}
-        </button>)}
-      </div>
       {query.isPending ? <LoadingState label="Cargando gastos" /> : null}
       {query.isError ? <ErrorState description={query.error.message} onRetry={query.refetch} /> : null}
       {query.data && !query.isError && !monthEvents.length ? <p className="rounded-xl border border-border bg-surface p-3 text-sm text-text-muted" role="status">No hay gastos para este mes. Puedes añadirlos desde Gastos.</p> : null}
-      {!query.isError && (mode === 'CALENDAR' ? <DayCalendar buttonRefs={dayButtonRefs} currentMonth={month} currency={currentHousehold.currency} days={days} eventsByDate={eventsByDate} onSelect={setSelectedDate} selectedDate={selectedDate} today={calendarToday(currentHousehold.timezone ?? 'UTC')} />
+      {!query.isError && (mode === 'CALENDAR' ? <>
+        <DayCalendar buttonRefs={dayButtonRefs} currentMonth={month} currency={currentHousehold.currency} days={days} eventsByDate={eventsByDate} onSelect={setSelectedDate} selectedDate={selectedDate} today={today} />
+        {query.data && month === currentMonth ? <section aria-labelledby="pending-until-today-heading" className="min-w-0">
+          <h2 className="text-lg font-bold" id="pending-until-today-heading">Pendiente hasta hoy</h2>
+          {pendingUntilToday.length ? <ol className="mt-3 space-y-3">{pendingUntilToday.map((event) => <CalendarEvent currency={currentHousehold.currency} event={event} householdId={householdId} key={occurrenceKey(event)} onClose={closePayment} onOpen={selectPayment} selection={!selectedDate && selection?.eventKey === occurrenceKey(event) ? selection : null} timezone={currentHousehold.timezone} />)}</ol>
+            : <p className="mt-2 text-sm text-text-muted">No hay nada pendiente hasta hoy.</p>}
+        </section> : null}
+      </>
         : <section aria-label="Gastos ordenados por fecha" className="min-w-0">
           {monthEvents.length ? <ol className="space-y-3">{sortedEvents(monthEvents.filter((event) => event.datePrecision !== 'MONTH')).map((event) => <CalendarEvent currency={currentHousehold.currency} event={event} householdId={householdId} key={occurrenceKey(event)} onClose={closePayment} onOpen={selectPayment} selection={selection?.eventKey === occurrenceKey(event) ? selection : null} timezone={currentHousehold.timezone} />)}</ol> : null}
           {monthlyUnscheduledEvents.length ? <section aria-labelledby="monthly-unscheduled-heading" className="mt-4 rounded-2xl border border-border bg-surface p-4">

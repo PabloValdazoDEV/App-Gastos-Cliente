@@ -45,42 +45,56 @@ function ExpenseBreakdown({ lines, currency }) {
   </div>;
 }
 
+function estimatedLabel(lines) {
+  const names = [...new Set(lines.filter((line) => line.status === 'ESTIMATED').map((line) => line.category?.name ?? line.name))];
+  if (!names.length) return 'Estimado';
+  return `Estimado (${names.slice(0, 2).join(', ')}${names.length > 2 ? '…' : ''})`;
+}
+
 export function MonthlyAccountOverview({ overview, currency, scope, title, forecastReady = true }) {
   const personal = scope === 'personal';
   const hasBalance = Number.isSafeInteger(overview.balanceCents);
   const negative = overview.projectedBalanceCents < 0;
+  const nothingPending = overview.unconfirmedCents === 0 && overview.estimatedCents === 0;
   return <section aria-labelledby={`${scope}-overview-heading`} className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface">
     <div className="bg-brand-soft p-5">
       <h2 className="text-lg font-bold" id={`${scope}-overview-heading`}>{title}</h2>
       <p className="mt-3 text-sm text-text-muted">Saldo que has anotado</p>
       <p className="mt-1 break-words text-3xl font-extrabold tracking-tight tabular-nums">{hasBalance ? formatCents(overview.balanceCents, currency) : 'Sin saldo registrado'}</p>
-      <MoreInfo className="mt-2">{!hasBalance ? 'Falta anotar un saldo actual en Cuentas.' : overview.balanceSource === 'HOUSEHOLD' ? 'Usamos el saldo conjunto guardado en el hogar.' : personal ? 'Suma de tus cuentas personales activas. No incluye la cuenta conjunta.' : 'Suma de las cuentas conjuntas activas.'}</MoreInfo>
+      {/* The month's bottom line: what is left once the forecast happens. */}
+      {!forecastReady ? <p className="mt-2 text-sm leading-6 text-text-muted">Completa el reparto del hogar para estimar cuánto quedaría.</p> : hasBalance ? (
+        <p className="mt-2 text-sm font-semibold">
+          <span>{negative ? 'Si se cumple la previsión, faltarían' : 'Si se cumple la previsión, quedarían'}</span>{' '}
+          <span className={`text-lg font-extrabold tabular-nums ${negative ? 'text-red-700' : 'text-brand-strong'}`}>{formatCents(Math.abs(overview.projectedBalanceCents), currency)}</span>
+        </p>
+      ) : <p className="mt-2 text-sm leading-6 text-text-muted">Anota tu saldo en Cuentas para ver si cubre lo pendiente.</p>}
     </div>
     <div className="space-y-4 p-5">
       <div>
         <h3 className="font-bold">{personal ? 'Tus gastos de este mes' : 'Gastos comunes de este mes'}</h3>
         <dl className="mt-3 space-y-2 text-sm">
-          <AmountRow label={forecastReady ? 'Previsto gastar en total' : 'Gastos conocidos (previsión incompleta)'} cents={overview.expectedCents} currency={currency} strong />
-          <AmountRow label="Ya confirmado como pagado" cents={overview.paidCents} currency={currency} />
-          {overview.unconfirmedCents > 0 ? <AmountRow label="Gastos registrados sin pago confirmado" cents={overview.unconfirmedCents} currency={currency} strong /> : null}
-          {overview.estimatedCents > 0 ? <AmountRow label="Previsión aún sin registrar (no es un pago del calendario)" cents={overview.estimatedCents} currency={currency} strong /> : null}
+          <AmountRow label="Ya pagado" cents={overview.paidCents} currency={currency} />
+          {overview.unconfirmedCents > 0 ? <AmountRow label="Por pagar" cents={overview.unconfirmedCents} currency={currency} /> : null}
+          {overview.estimatedCents > 0 ? <AmountRow label={estimatedLabel(overview.lines)} cents={overview.estimatedCents} currency={currency} /> : null}
+          <div className="border-t border-border pt-2">
+            <AmountRow label={forecastReady ? 'Previsto este mes' : 'Gastos conocidos (previsión incompleta)'} cents={overview.expectedCents} currency={currency} strong />
+          </div>
         </dl>
-        {overview.unconfirmedCents > 0 ? <p className="mt-3 text-xs leading-5 text-text-muted">Si ya pagaste alguno, confírmalo en Calendario para quitarlo de esta cifra.</p> : null}
-        {overview.estimatedCents > 0 ? <MoreInfo className="mt-2">Es una estimación de gastos variables o facturas todavía no registrados: no corresponde a un gasto concreto que puedas marcar en el calendario.</MoreInfo> : null}
-        {overview.unconfirmedCents === 0 && overview.estimatedCents === 0 ? <p className="mt-3 text-xs leading-5 text-text-muted">No hay gastos pendientes de pago ni estimaciones sin registrar.</p> : null}
-      </div>
-      <div className="border-t border-border pt-4">
-        {!forecastReady ? <p className="text-sm leading-6 text-text-muted">Completa el reparto del hogar antes de estimar cuánto quedaría después de los gastos.</p> : hasBalance ? <>
-          <p className="text-sm font-semibold">{negative ? 'Si se cumple la previsión, faltarían' : 'Si se cumple la previsión, quedarían'}</p>
-          <p className={`mt-1 break-words text-2xl font-extrabold tabular-nums ${negative ? 'text-red-700' : 'text-brand-strong'}`}>{formatCents(Math.abs(overview.projectedBalanceCents), currency)}</p>
-          <MoreInfo className="mt-2">Solo si el saldo está al día y se cumple la previsión. {personal ? 'No descuenta tu aportación a la cuenta conjunta ni reservas para otros meses.' : 'No es dinero libre: puede estar reservado para otros meses. No incluye atrasos de meses anteriores.'}</MoreInfo>
-        </> : <p className="text-sm leading-6 text-text-muted">Anota tu saldo en Cuentas para ver si cubre lo pendiente. No usamos un saldo antiguo de Planificación como si fuera el actual.</p>}
+        {nothingPending ? <p className="mt-3 text-xs leading-5 text-text-muted">No queda nada por pagar ni por estimar.</p> : null}
       </div>
       <details className="border-t border-border pt-1">
-        <summary className={summaryClass}>Ver de dónde sale cada importe</summary>
-        {hasBalance && forecastReady ? <p className="mb-3 rounded-xl bg-surface-muted p-3 text-sm leading-6">Saldo anotado {formatCents(overview.balanceCents, currency)} − gastos registrados sin confirmar {formatCents(overview.unconfirmedCents, currency)} − previsión aún sin registrar {formatCents(overview.estimatedCents, currency)} = {formatCents(overview.projectedBalanceCents, currency)}. Los pagos ya confirmados no se restan otra vez.</p> : null}
+        <summary className={summaryClass}>Ver detalle</summary>
+        <div className="mb-3 space-y-2 rounded-xl bg-surface-muted p-3 text-sm leading-6">
+          {hasBalance && forecastReady ? <p>Saldo anotado {formatCents(overview.balanceCents, currency)} − por pagar {formatCents(overview.unconfirmedCents, currency)} − estimado {formatCents(overview.estimatedCents, currency)} = {formatCents(overview.projectedBalanceCents, currency)}. Lo ya pagado no se resta otra vez.</p> : null}
+          <p>
+            {!hasBalance ? 'Falta anotar un saldo actual en Cuentas. ' : overview.balanceSource === 'HOUSEHOLD' ? 'El saldo es el conjunto guardado en el hogar. ' : personal ? 'El saldo suma tus cuentas personales activas, sin la conjunta. ' : 'El saldo suma las cuentas conjuntas activas. '}
+            Usamos los saldos que anotas, no una conexión con tu banco.
+          </p>
+          {overview.unconfirmedCents > 0 ? <p>«Por pagar» son gastos ya registrados: si pagaste alguno, márcalo como pagado.</p> : null}
+          {overview.estimatedCents > 0 ? <p>«Estimado» es la media de gastos variables o facturas que aún no has apuntado; no es un recibo concreto.</p> : null}
+          {hasBalance && forecastReady ? <p>{personal ? 'No descuenta tu aportación a la cuenta conjunta ni reservas para otros meses.' : 'Lo que queda no es dinero libre: puede estar reservado para otros meses. No incluye atrasos de meses anteriores.'}</p> : null}
+        </div>
         <ExpenseBreakdown lines={overview.lines} currency={currency} />
-        <MoreInfo className="mt-3">Sumamos los gastos que corresponden a este mes. Un pago anual cuenta entero cuando vence; el ahorro mensual para prepararlo está en Planificación. Una factura registrada sustituye su estimación.</MoreInfo>
       </details>
       <Link className="inline-flex min-h-11 items-center text-sm font-bold text-brand-strong underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to="/calendario">Revisar gastos y confirmar pagos</Link>
     </div>

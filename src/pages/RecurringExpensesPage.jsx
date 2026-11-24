@@ -4,6 +4,7 @@ import {
   CalendarCheck2,
   CheckCircle2,
   ChevronDown,
+  MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
@@ -512,6 +513,8 @@ export function RecurringExpensesPage() {
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState(routeExpenseId ?? null);
+  // Edit/details/delete are occasional: they live behind "Más" so the card keeps one clear action.
+  const [actionsExpenseId, setActionsExpenseId] = useState(null);
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -715,6 +718,8 @@ export function RecurringExpensesPage() {
                 const isLinkedExpense = routeExpenseId === expense.id;
                 const isExpanded = expandedExpenseId === expense.id;
                 const isEditing = editingExpenseId === expense.id;
+                // Keep the secondary actions visible while their panel is open.
+                const actionsOpen = actionsExpenseId === expense.id || isEditing || isExpanded;
 
                 return (
                 <li
@@ -740,8 +745,11 @@ export function RecurringExpensesPage() {
                             ? expense.personalPerson?.name ?? 'Personal'
                             : 'Gasto común'}
                         </p>
-                        <p className="mt-2 text-sm font-semibold text-text">
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-text">
                           Próximo pago: {formatCivilDate(expense.nextDueDate)}
+                          {isoDate(expense.nextDueDate) < todayIso() ? (
+                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-bold text-red-800">Atrasado</span>
+                          ) : null}
                         </p>
                         {isLinkedExpense ? (
                           <p className="mt-2 text-xs font-bold uppercase tracking-wide text-brand-strong">
@@ -754,11 +762,11 @@ export function RecurringExpensesPage() {
                       <p className="text-xl font-extrabold text-text">
                           {formatCents(expense.amountCents, currency)}
                         </p>
-                      <p className="mt-1 text-xs font-semibold text-text-muted">
-                        {Number.isInteger(expense.safetyMarginOverrideBps)
-                          ? `Margen propio: ${expense.safetyMarginOverrideBps / 100} %`
-                          : 'Margen heredado'}
-                      </p>
+                      {Number.isInteger(expense.safetyMarginOverrideBps) ? (
+                        <p className="mt-1 text-xs font-semibold text-text-muted">
+                          Margen propio: {expense.safetyMarginOverrideBps / 100} %
+                        </p>
+                      ) : null}
                       <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                         <button
                           aria-controls={`recurring-payment-form-${expense.id}`}
@@ -776,6 +784,28 @@ export function RecurringExpensesPage() {
                           Marcar como pagado
                         </button>
                         <button
+                          aria-controls={`recurring-actions-${expense.id}`}
+                          aria-expanded={actionsOpen}
+                          aria-label={`Acciones de ${expense.name}`}
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
+                          onClick={() => {
+                            if (!actionsOpen) {
+                              setActionsExpenseId(expense.id);
+                              return;
+                            }
+                            setActionsExpenseId(null);
+                            setEditingExpenseId(null);
+                            setExpandedExpenseId(null);
+                          }}
+                          type="button"
+                        >
+                          <MoreHorizontal aria-hidden="true" className="size-4" />
+                          Más
+                        </button>
+                      </div>
+                      {actionsOpen ? (
+                        <div className="mt-2 grid min-w-0 grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:justify-end" id={`recurring-actions-${expense.id}`}>
+                        <button
                           className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-auto sm:px-3"
                           onClick={() => {
                             setShowForm(false);
@@ -789,21 +819,6 @@ export function RecurringExpensesPage() {
                         >
                           <Pencil aria-hidden="true" className="size-4" />
                           Editar
-                        </button>
-                        <button
-                          aria-label={`Eliminar ${expense.name}`}
-                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-300 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-3"
-                          disabled={deleteExpense.isPending}
-                          onClick={() => {
-                            deleteExpense.reset();
-                            setEditingExpenseId(null);
-                            selectPayment(null);
-                            setDeletingExpenseId(expense.id);
-                          }}
-                          type="button"
-                        >
-                          <Trash2 aria-hidden="true" className="size-4" />
-                          Eliminar
                         </button>
                         <button
                           aria-controls={`recurring-details-${expense.id}`}
@@ -822,9 +837,25 @@ export function RecurringExpensesPage() {
                             aria-hidden="true"
                             className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                           />
-                          {isExpanded ? 'Ocultar detalles' : 'Ver detalles'}
+                          {isExpanded ? 'Ocultar' : 'Detalles'}
                         </button>
-                      </div>
+                        <button
+                          aria-label={`Eliminar ${expense.name}`}
+                          className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-300 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:px-3"
+                          disabled={deleteExpense.isPending}
+                          onClick={() => {
+                            deleteExpense.reset();
+                            setEditingExpenseId(null);
+                            selectPayment(null);
+                            setDeletingExpenseId(expense.id);
+                          }}
+                          type="button"
+                        >
+                          <Trash2 aria-hidden="true" className="size-4" />
+                          Eliminar
+                        </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   {paymentExpenseId === expense.id ? (

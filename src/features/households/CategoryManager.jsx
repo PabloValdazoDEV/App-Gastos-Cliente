@@ -187,61 +187,41 @@ function CategoryRow({
   canDelete,
   canManage,
   category,
-  householdMarginBps,
-  isArchiving,
   isDeleting,
   isRestoring,
-  onArchive,
   onDelete,
   onEdit,
   onRestore,
 }) {
-  const marginLabel = Number.isInteger(category.safetyMarginBps)
-    ? `${category.safetyMarginBps / 100} % propio`
-    : `${householdMarginBps / 100} % general`;
+  // Only an own margin is worth showing; the general one is the same for every row.
+  const ownMargin = Number.isInteger(category.safetyMarginBps)
+    ? `Margen propio: ${category.safetyMarginBps / 100} %`
+    : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-surface-muted p-4 sm:p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <CategoryIconBadge category={category} className="size-11" />
+    <div className="rounded-xl border border-border bg-surface-muted px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex min-w-40 flex-1 items-center gap-3">
+          <CategoryIconBadge category={category} className="size-9" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="break-words font-extrabold text-text">{category.name}</p>
-              {category.isDefault ? (
-                <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-text-muted">
-                  Predeterminada
-                </span>
-              ) : null}
+              <p className="break-words font-bold text-text">{category.name}</p>
               {category.archivedAt ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
                   Archivada
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-xs leading-5 text-text-muted">
-              Icono {categoryIconLabels[category.icon] ?? 'personalizado'} · Margen {marginLabel}
-            </p>
+            {ownMargin ? <p className="text-xs leading-5 text-text-muted">{ownMargin}</p> : null}
           </div>
         </div>
         {canManage ? (
-          <div className="flex flex-col gap-2 min-[430px]:flex-row sm:justify-end">
+          <div className="flex flex-wrap gap-2">
             {!category.archivedAt ? (
-              <>
-                <button className={secondaryButton} onClick={onEdit} type="button">
-                  <Pencil aria-hidden="true" className="size-4" />
-                  Editar
-                </button>
-                <button
-                  className={secondaryButton}
-                  disabled={isArchiving}
-                  onClick={onArchive}
-                  type="button"
-                >
-                  <Archive aria-hidden="true" className="size-4" />
-                  {isArchiving ? 'Archivando…' : 'Archivar'}
-                </button>
-              </>
+              <button aria-label={`Editar ${category.name}`} className={secondaryButton} onClick={onEdit} type="button">
+                <Pencil aria-hidden="true" className="size-4" />
+                Editar
+              </button>
             ) : (
               <>
                 <button
@@ -330,7 +310,6 @@ export function CategoryManager({ household }) {
   });
   const result = categoriesQuery.data;
   const categories = result?.categories ?? [];
-  const householdMarginBps = result?.householdSafetyMarginBps ?? household.safetyMarginBps;
   const mutationError =
     createCategory.error ??
     updateCategory.error ??
@@ -408,17 +387,13 @@ export function CategoryManager({ household }) {
           />
         ) : null}
         {categoriesQuery.isSuccess && categories.length > 0 ? (
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {categories.map((category) => (
               <li key={category.id}>
                 <CategoryRow
                   canDelete={canDelete}
                   canManage={canManage}
                   category={category}
-                  householdMarginBps={householdMarginBps}
-                  isArchiving={
-                    archiveCategory.isPending && archiveCategory.variables?.categoryId === category.id
-                  }
                   isDeleting={
                     deleteCategory.isPending && deleteCategory.variables?.categoryId === category.id
                   }
@@ -429,10 +404,6 @@ export function CategoryManager({ household }) {
                     setArchiveConfirmationId(null);
                     setDeleteConfirmationId(null);
                     restoreCategory.mutate({ householdId: household.id, categoryId: category.id });
-                  }}
-                  onArchive={() => {
-                    setDeleteConfirmationId(null);
-                    setArchiveConfirmationId(category.id);
                   }}
                   onDelete={() => {
                     setArchiveConfirmationId(null);
@@ -459,6 +430,21 @@ export function CategoryManager({ household }) {
                       }
                       submitLabel="Guardar categoría"
                     />
+                    <div className="mt-4 border-t border-brand/20 pt-4">
+                      <button
+                        className={secondaryButton}
+                        disabled={archiveCategory.isPending}
+                        onClick={() => {
+                          setEditingId(null);
+                          setDeleteConfirmationId(null);
+                          setArchiveConfirmationId(category.id);
+                        }}
+                        type="button"
+                      >
+                        <Archive aria-hidden="true" className="size-4" />
+                        Archivar categoría
+                      </button>
+                    </div>
                   </div>
                 ) : null}
                 {archiveConfirmationId === category.id ? (

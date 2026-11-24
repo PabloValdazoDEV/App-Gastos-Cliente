@@ -51,6 +51,12 @@ import { RecurringExpensesPage } from './RecurringExpensesPage';
 
 vi.mock('../features/purchases/purchasesService', () => ({ purchasesService: { list: vi.fn(async () => []) } }));
 
+// Edit, details and delete live behind the card's "Más" button.
+async function openActions(user) {
+  const [button] = await screen.findAllByRole('button', { name: /^Acciones de / });
+  await user.click(button);
+}
+
 function renderPage(initialEntry = '/gastos/recurrentes') {
   const client = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
@@ -226,7 +232,8 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Eliminar Internet' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Eliminar Internet' }));
     expect(mocks.deleteRecurring).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toHaveTextContent('¿Eliminar Internet?');
     await user.click(screen.getByRole('button', { name: 'Eliminar gasto' }));
@@ -318,7 +325,8 @@ describe('RecurringExpensesPage', () => {
       actualAmountCents: 4_000, paymentDate: '2026-08-20', notes: null,
     }]);
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Ver detalles' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Detalles' }));
     const edit = await screen.findByRole('button', { name: 'Editar pago' });
     await user.click(edit);
     expect(edit).toHaveAttribute('aria-expanded', 'true');
@@ -360,7 +368,8 @@ describe('RecurringExpensesPage', () => {
       { id: 'payment-2', status: 'PAID', dueDate: '2026-07-23', expectedAmountCents: 4_000, actualAmountCents: 4_000, paymentDate: '2026-07-23', notes: null },
     ]);
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Ver detalles' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Detalles' }));
     const triggers = await screen.findAllByRole('button', { name: 'Editar pago' });
     await user.click(triggers[0]);
     await user.click(screen.getByRole('button', { name: 'Guardar corrección' }));
@@ -435,7 +444,8 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Editar' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Editar' }));
     await user.click(screen.getByRole('button', { name: /Más opciones/ }));
     await user.click(screen.getByRole('radio', { name: /Margen propio/i }));
     await user.type(screen.getByLabelText('Margen específico (%)'), '8,75');
@@ -481,7 +491,8 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Ver detalles' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Detalles' }));
     expect(await screen.findByText('Vencimiento 30 jul 2026')).toBeInTheDocument();
     expect(screen.getByText(/49,50/)).toBeInTheDocument();
     const offset = await screen.findByLabelText('Días de antelación');
@@ -523,7 +534,8 @@ describe('RecurringExpensesPage', () => {
     ]);
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Ver detalles' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Detalles' }));
     await user.click(await screen.findByRole('button', { name: 'Editar pago' }));
     const amount = screen.getByLabelText('Importe real (€)');
     await user.clear(amount);
@@ -650,6 +662,28 @@ describe('RecurringExpensesPage', () => {
     expect(screen.getByLabelText('Se repite cada (semanas)')).toHaveValue(null);
   });
 
+  it('tarjeta compacta: un vencimiento pasado se marca como atrasado y editar/eliminar quedan en «Más»', async () => {
+    const user = userEvent.setup();
+    mocks.recurring.mockResolvedValue([
+      recurringExpense({ nextDueDate: '2020-01-05T00:00:00.000Z' }),
+      recurringExpense({ id: 'expense-2', name: 'Seguro', nextDueDate: '2099-01-05T00:00:00.000Z' }),
+    ]);
+    renderPage();
+
+    const late = (await screen.findByRole('heading', { name: 'Gimnasio' })).closest('li');
+    const onTime = screen.getByRole('heading', { name: 'Seguro' }).closest('li');
+    expect(within(late).getByText('Atrasado')).toBeVisible();
+    expect(within(onTime).queryByText('Atrasado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Margen heredado')).not.toBeInTheDocument();
+    expect(within(late).queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+    expect(within(late).getByRole('button', { name: 'Marcar como pagado' })).toBeVisible();
+
+    await user.click(within(late).getByRole('button', { name: 'Acciones de Gimnasio' }));
+    expect(within(late).getByRole('button', { name: 'Editar' })).toBeVisible();
+    expect(within(late).getByRole('button', { name: 'Eliminar Gimnasio' })).toBeVisible();
+    expect(within(onTime).queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+  });
+
   it('edita cada 4 semanas con sus valores y presenta la misma etiqueta en listado y detalle', async () => {
     const user = userEvent.setup();
     mocks.recurring.mockResolvedValue([recurringExpense()]);
@@ -657,7 +691,8 @@ describe('RecurringExpensesPage', () => {
 
     expect(await screen.findByText('Cada 4 semanas')).toBeInTheDocument();
     expect(screen.queryByText('Cada varias semanas')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Ver detalles' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Detalles' }));
     expect(screen.getAllByText('Cada 4 semanas')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'Editar' }));
     expect(screen.getByLabelText('Periodicidad')).toHaveValue('CUSTOM_WEEKS');
@@ -679,7 +714,8 @@ describe('RecurringExpensesPage', () => {
     const user = userEvent.setup();
     mocks.recurring.mockResolvedValue([recurringExpense()]);
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Editar' }));
+    await openActions(user);
+    await user.click(screen.getByRole('button', { name: 'Editar' }));
     await user.selectOptions(screen.getByLabelText('Periodicidad'), frequency);
     expect(screen.queryByLabelText('Se repite cada (semanas)')).not.toBeInTheDocument();
     if (intervalMonths) await user.type(screen.getByLabelText('Se repite cada (meses)'), String(intervalMonths));
@@ -696,6 +732,7 @@ describe('RecurringExpensesPage', () => {
     })]);
     renderPage();
     expect(await screen.findByText('Cada 3 meses')).toBeInTheDocument();
+    await openActions(user);
     await user.click(screen.getByRole('button', { name: 'Editar' }));
     expect(screen.getByLabelText('Se repite cada (meses)')).toHaveValue(3);
     await user.selectOptions(screen.getByLabelText('Periodicidad'), 'CUSTOM_WEEKS');

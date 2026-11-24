@@ -98,7 +98,7 @@ describe('CategoryManager', () => {
     const user = userEvent.setup();
     renderManager();
 
-    await user.click(await screen.findByRole('button', { name: 'Editar' }));
+    await user.click(await screen.findByRole('button', { name: 'Editar Vivienda' }));
     const name = screen.getByLabelText('Nombre de la categoría');
     await user.clear(name);
     await user.type(name, 'Hogar');
@@ -122,7 +122,9 @@ describe('CategoryManager', () => {
     const user = userEvent.setup();
     renderManager();
 
-    await user.click(await screen.findByRole('button', { name: 'Archivar' }));
+    // Archiving is rare: it lives inside the edit panel.
+    await user.click(await screen.findByRole('button', { name: 'Editar Vivienda' }));
+    await user.click(screen.getByRole('button', { name: 'Archivar categoría' }));
     expect(mocks.archiveCategory).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Confirmar archivo' }));
     await waitFor(() =>
@@ -166,7 +168,7 @@ describe('CategoryManager', () => {
       screen.getByText(/Solo administradores y propietarios pueden cambiarlas/i),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Nueva categoría' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Editar/ })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Eliminar definitivamente' }),
     ).not.toBeInTheDocument();
