@@ -143,6 +143,18 @@ function personName(people, personId) {
   return people.find((person) => person.id === personId)?.name ?? 'Persona';
 }
 
+// Last category used for variable spending, then Supermercado, then the first one.
+function defaultVariableCategoryId(categories, existingMonths = []) {
+  const available = new Set(categories.map((category) => category.id));
+  const latest = [...existingMonths]
+    .filter((month) => available.has(month.categoryId))
+    .sort((a, b) => b.year - a.year || b.month - a.month)[0];
+  return latest?.categoryId
+    ?? categories.find((category) => category.slug === 'supermercado')?.id
+    ?? categories[0]?.id
+    ?? '';
+}
+
 function VariableForm({
   categories,
   currency = 'EUR',
@@ -198,8 +210,9 @@ function VariableForm({
               spentOn: initialEntryDate(currentPeriod),
             }]),
       ],
-      categoryId: initialMonth?.categoryId ?? categories[0]?.id ?? '',
-      entryMode: initialMonth?.entryMode ?? 'SUMMARY',
+      categoryId: initialMonth?.categoryId ?? defaultVariableCategoryId(categories, existingMonths),
+      // A new note is usually one ticket: a SUMMARY would replace the month's whole forecast.
+      entryMode: initialMonth?.entryMode ?? 'DETAIL',
       notes: initialMonth?.notes ?? '',
       period: currentPeriod,
       summaryPaid: initialMonth ? Boolean(initialMonth.paidAt) : currentPeriod <= currentMonthInput(),
@@ -535,7 +548,7 @@ function VariableForm({
           {existingMatch ? (
             <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="status">
               Ya hay {formatCents(totalForMonth(existingMatch), currency)} apuntados en{' '}
-              {existingMatch.category?.name ?? 'esta categoría'} de {formatMonth(existingMatch.year, existingMatch.month)}.
+              {existingMatch.category?.name ?? 'esta categoría'} de {formatMonth(existingMatch.year, existingMatch.month).toLowerCase()}.
               Lo que añadas ahora se sumará como un apunte más; no se borra nada.
             </p>
           ) : null}
@@ -602,7 +615,7 @@ function VariableStatistics({ currency, householdId, people, statistics }) {
                 <div className="rounded-xl bg-surface-muted p-3" key={label}>
                   <dt className="text-xs font-semibold text-text-muted">{label}</dt>
                   <dd className="mt-1 text-sm font-extrabold text-text">{formatCents(value, currency)}</dd>
-                  <dd className="mt-0.5 text-[0.6875rem] text-text-soft">{count ?? 0} disponibles</dd>
+                  <dd className="mt-0.5 text-[0.6875rem] text-text-soft">{count ?? 0} {count === 1 ? 'mes' : 'meses'} con datos</dd>
                 </div>
               ))}
             </dl>

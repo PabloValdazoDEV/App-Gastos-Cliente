@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -72,6 +72,9 @@ describe('VariableExpensesPage', () => {
 
     await screen.findByRole('heading', { name: 'No hay gastos variables' });
     await user.click(screen.getByRole('button', { name: 'Añadir el primer mes' }));
+    // A new note opens as a detailed ticket; the monthly total is an explicit choice.
+    expect(screen.getByLabelText('Apuntes detallados')).toBeChecked();
+    await user.click(screen.getByLabelText('Total mensual'));
     expect(screen.queryByText('Ya están apuntados todos los gastos de este mes')).not.toBeInTheDocument();
     // The monthly total is marked as paid by default for the current month.
     expect(screen.getByRole('checkbox', { name: 'Este total ya está pagado' })).toBeChecked();
@@ -109,16 +112,40 @@ describe('VariableExpensesPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Añadir gasto variable' }));
 
     expect(await screen.findByText(/se sumará como un apunte más; no se borra nada/)).toBeInTheDocument();
-    await user.type(screen.getByLabelText('Total del mes (€)'), '54,20');
+    await user.type(screen.getByLabelText('Importe (€)'), '54,20');
     await user.click(screen.getByRole('button', { name: 'Añadir al mes' }));
 
     await waitFor(() => {
       expect(mocks.saveVariableMonth).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.objectContaining({ append: true, summaryAmountCents: 5_420 }),
+          body: expect.objectContaining({
+            append: true,
+            entryMode: 'DETAIL',
+            entries: [expect.objectContaining({ amountCents: 5_420 })],
+          }),
         }),
       );
     });
+  });
+
+  it('propone la última categoría usada en variables, no la primera de la lista', async () => {
+    const user = userEvent.setup();
+    mocks.listCategories.mockResolvedValue({
+      categories: [
+        { id: 'category-agua', name: 'Agua', slug: 'agua' },
+        { id: 'category-1', name: 'Supermercado', slug: 'supermercado' },
+        { id: 'category-ocio', name: 'Ocio', slug: 'ocio' },
+      ],
+    });
+    mocks.variableExpenses.mockResolvedValue([
+      { id: 'm1', categoryId: 'category-1', category: { name: 'Supermercado' }, ownerKey: 'HOUSEHOLD', scope: 'HOUSEHOLD', year: 2026, month: 7, entryMode: 'SUMMARY', summaryAmountCents: 100, totalCents: 100 },
+      { id: 'm2', categoryId: 'category-ocio', category: { name: 'Ocio' }, ownerKey: 'HOUSEHOLD', scope: 'HOUSEHOLD', year: 2026, month: 8, entryMode: 'SUMMARY', summaryAmountCents: 100, totalCents: 100 },
+    ]);
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Añadir gasto variable' }));
+    const form = screen.getByRole('button', { name: 'Guardar gasto variable' }).closest('form');
+    expect(within(form).getByLabelText('Categoría')).toHaveValue('category-ocio');
   });
 
   it('el margen pertenece al grupo recomendado, no al mes registrado', async () => {
@@ -151,6 +178,7 @@ describe('VariableExpensesPage', () => {
 
     await screen.findByRole('heading', { name: 'No hay gastos variables' });
     await user.click(screen.getByRole('button', { name: 'Añadir el primer mes' }));
+    await user.click(screen.getByLabelText('Total mensual'));
     await user.type(screen.getByLabelText('Total del mes (€)'), '0');
     await user.click(screen.getByRole('button', { name: 'Guardar gasto variable' }));
 

@@ -62,15 +62,17 @@ function DuePaymentRow({ currency, householdId, payment, today }) {
     }),
     onSuccess: async () => {
       setPaid(true);
-      toast.success(`${payment.name}: pagado ${formatCents(payment.amountCents, currency)} hoy.`);
+      // Name the occurrence: with several overdue months the row reappears with the next date.
+      toast.success(`${payment.name}: pagado el del ${formatCivilDate(payment.dueDate)} (${formatCents(payment.amountCents, currency)}).`);
       await invalidateBudgetQueries(queryClient, householdId);
     },
     onError: (error) => toast.error(error.message || 'No se pudo marcar como pagado.'),
   });
 
   return (
-    <li className="flex min-w-0 flex-wrap items-center gap-3 py-3">
-      <div className="min-w-0 flex-1">
+    <li className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-3">
+      {/* min-w keeps the name readable: on narrow screens the buttons wrap below instead of squeezing it. */}
+      <div className="min-w-40 flex-1">
         <p className="break-words font-bold">{payment.name}</p>
         <p className={`text-sm ${overdue ? 'font-semibold text-red-700' : 'text-text-muted'}`}>
           {overdue ? <AlertTriangle aria-hidden="true" className="mr-1 inline size-4 align-[-3px]" /> : null}

@@ -361,7 +361,7 @@ function HouseholdCalendar({ currentHousehold }) {
       <MoreInfo>Todos los gastos del periodo: recurrentes, facturas, variables, puntuales y pagos de compras. Incluye los gastos comunes y tus gastos personales.</MoreInfo>
       <section aria-label="Mes del calendario" className="min-w-0 rounded-2xl border border-border bg-surface p-4">
         <div className="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 aria-live="polite" aria-atomic="true" className="text-lg font-bold capitalize">{formatDate(`${month}-01`, true)}</h2>
+          <h2 aria-live="polite" aria-atomic="true" className="text-lg font-bold first-letter:uppercase">{formatDate(`${month}-01`, true)}</h2>
           <div className="grid w-full grid-cols-3 gap-1 sm:w-auto sm:gap-2" role="group" aria-label="Cambiar mes">
             <button aria-label="Mes anterior" className={`${monthAction} border-border-strong hover:bg-surface-muted`} disabled={month <= '2000-01'} onClick={() => changeMonth(shiftCalendarMonth(month, -1))} type="button"><ChevronLeft aria-hidden="true" className="size-4 shrink-0" /><span>Anterior</span></button>
             <button aria-pressed={month === currentMonth} className={`${monthAction} ${month === currentMonth ? 'border-brand bg-brand text-on-brand hover:bg-brand-hover' : 'border-border-strong hover:bg-surface-muted'}`} onClick={() => changeMonth(currentMonth)} type="button">Este mes</button>
