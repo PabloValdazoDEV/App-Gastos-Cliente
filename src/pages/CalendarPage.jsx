@@ -214,6 +214,7 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${status.className}`}><Icon className="size-3.5" aria-hidden="true" />{status.label}</span>
         {event.status === 'PAID' && event.paymentDate ? <p className="text-sm text-text-muted">Fecha de pago: {formatDate(event.paymentDate)}</p> : null}
+        {event.countsInBudget === false ? <span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-bold text-text-muted">No cuenta en la previsión</span> : null}
       </div>
       {canRegister || canEdit ? (
         <div className="mt-4 flex flex-wrap gap-2">

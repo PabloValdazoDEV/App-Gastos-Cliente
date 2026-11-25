@@ -112,6 +112,10 @@ export const financeService = {
   calendar: (householdId, view = '30_DAYS', anchorDate) =>
     http.get(`${home(householdId)}/calendar`, { params: { view, ...(anchorDate ? { anchorDate } : {}) } }),
   plannings: (householdId) => http.get(`${home(householdId)}/plannings`),
+  fundingCheck: ({ householdId, month, balanceCents, contributionDone }) =>
+    http.get(`${home(householdId)}/plannings/funding-check`, {
+      params: { month, balanceCents, contributionDone: String(contributionDone) },
+    }),
   prepareMonth: ({ householdId, body }) =>
     http.post(`${home(householdId)}/plannings/prepare`, body),
   fundPlanning: ({ householdId, planningId, scope, action, expectedVersion, reason }) =>

@@ -43,6 +43,7 @@ import { MoreInfo } from '../components/ui/MoreInfo';
 const oneTimeSchema = z
   .object({
     applySafetyMargin: z.boolean().default(false),
+    countsInBudget: z.boolean().default(true),
     amount: positiveMoneyInputSchema,
     categoryId: z.string().min(1, 'Selecciona una categoría.'),
     expenseDate: z.string().min(1, 'Indica la fecha del gasto.'),
@@ -88,6 +89,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
   } = useForm({
     defaultValues: {
       applySafetyMargin: initialExpense?.applySafetyMargin ?? false,
+      countsInBudget: initialExpense?.countsInBudget ?? true,
       amount: Number.isSafeInteger(initialExpense?.amountCents)
         ? (initialExpense.amountCents / 100).toFixed(2)
         : '',
@@ -103,6 +105,7 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
   });
   const scope = watch('scope');
   const expenseDate = watch('expenseDate');
+  const countsInBudget = watch('countsInBudget');
   useEffect(() => {
     if (initialExpense || !expenseDate || dirtyFields.paid) return;
     setValue('paid', expenseDate <= todayIso(), { shouldDirty: false });
@@ -114,7 +117,8 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
         householdId,
         ...(isEditing ? { expenseId: initialExpense.id } : {}),
         body: {
-          applySafetyMargin: values.applySafetyMargin,
+          applySafetyMargin: values.countsInBudget ? values.applySafetyMargin : false,
+          countsInBudget: values.countsInBudget,
           amountCents: eurosInputToCents(values.amount),
           categoryId: values.categoryId,
           expenseDate: values.expenseDate,
@@ -201,10 +205,18 @@ function OneTimeForm({ categories, householdId, initialExpense, onClose, onBusyC
           ) : null}
           <SafetyMarginCheckbox
             disabled={save.isPending}
-            help="Si lo activas se aplicará el margen de su categoría o, si no tiene uno propio, el margen general del hogar."
-            label="Aplicar margen de seguridad a este gasto"
-            {...register('applySafetyMargin')}
+            help="Desmárcalo si lo pagas con ahorros o desde fuera de la cuenta: seguirá en la lista y en el calendario, pero no sumará a la previsión ni a la aportación."
+            label="Contar en la previsión del mes"
+            {...register('countsInBudget')}
           />
+          {countsInBudget ? (
+            <SafetyMarginCheckbox
+              disabled={save.isPending}
+              help="Si lo activas se aplicará el margen de su categoría o, si no tiene uno propio, el margen general del hogar."
+              label="Aplicar margen de seguridad a este gasto"
+              {...register('applySafetyMargin')}
+            />
+          ) : null}
           <TextareaField
             error={errors.notes?.message}
             label="Notas (opcional)"
@@ -363,7 +375,7 @@ export function OneTimeExpensesPage() {
                   <li className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-card" key={expense.id}>
                     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex min-w-0 items-start gap-3"><CategoryIconBadge category={expense.category} /><div className="min-w-0"><h3 className="break-words font-extrabold text-text">{expense.name}</h3><p className="mt-1 break-words text-sm text-text-muted">{expense.category?.name ?? 'Sin categoría'} · {formatCivilDate(expense.expenseDate)} · {expense.scope === 'PERSONAL' ? expense.personalPerson?.name ?? 'Personal' : 'Gasto común'}</p>{expense.notes ? <p className="mt-2 break-words text-sm text-text-muted">{expense.notes}</p> : null}</div></div>
-                      <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><p className="mt-1 text-xs font-semibold text-text-muted">{expense.paidAt ? 'Pagado' : 'Pendiente de confirmar'}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => { setEditingId(expense.id); setShowForm(true); }} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
+                      <div className="shrink-0 sm:text-right"><p className="text-xl font-extrabold text-text">{formatCents(expense.amountCents, currency)}</p><p className="mt-1 text-xs font-semibold text-text-muted">{expense.paidAt ? 'Pagado' : 'Pendiente de confirmar'}</p>{expense.countsInBudget === false ? <p className="mt-1 inline-flex rounded-full bg-surface-muted px-2 py-0.5 text-xs font-bold text-text-muted">No cuenta en la previsión</p> : null}<div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border-strong px-2 py-2 text-sm font-bold text-text hover:bg-surface-muted sm:w-auto sm:px-3" onClick={() => { setEditingId(expense.id); setShowForm(true); }} type="button"><Pencil aria-hidden="true" className="size-4" />Editar</button><button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-2 py-2 text-sm font-bold text-red-800 hover:bg-red-50 sm:w-auto sm:px-3" onClick={() => setDeletingId(expense.id)} type="button"><Trash2 aria-hidden="true" className="size-4" />Eliminar</button></div></div>
                     </div>
                   </li>
                 )}

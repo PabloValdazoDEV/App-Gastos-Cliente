@@ -173,6 +173,9 @@ function MonthPlanning({ currentHousehold, month }) {
           currency={currency}
           error={prepare.isError ? prepare.error.message : ''}
           expectedTotalCents={expectedTotalCents}
+          fetchCheck={typeof financeService.fundingCheck === 'function'
+            ? (answers) => financeService.fundingCheck({ householdId, month: calculationDate, ...answers })
+            : undefined}
           monthLabel={planningMonthLabel(month)}
           onBalanceChange={setBalance}
           onPersonalBalanceChange={(personId, value) => setPersonalBalances((current) => ({ ...current, [personId]: value }))}

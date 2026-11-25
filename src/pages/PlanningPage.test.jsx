@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   dashboard: vi.fn(), fundPlanning: vi.fn(), prepareMonth: vi.fn(), updateRecovery: vi.fn(), success: vi.fn(),
-  createPlanningExtra: vi.fn(), createRecovery: vi.fn(),
+  createPlanningExtra: vi.fn(), createRecovery: vi.fn(), fundingCheck: vi.fn(),
   household: { currentHousehold: { currency: 'EUR', id: 'household-1' }, isPending: false },
 }));
 vi.mock('react-hot-toast', () => ({ default: { success: mocks.success, error: vi.fn() } }));
@@ -53,6 +53,8 @@ describe('PlanningPage salary month forecast', () => {
     mocks.prepareMonth.mockResolvedValue({ id: 'planning-1' });
     mocks.fundPlanning.mockResolvedValue({ id: 'planning-1' });
     mocks.updateRecovery.mockResolvedValue({});
+    // Older server by default: the wizard computes locally and offers no spreading.
+    mocks.fundingCheck.mockRejectedValue({ status: 404 });
   });
   it('keeps the initial amount fixed and includes extras in confirmed and pending totals', async () => {
     const saved = planning({ fundingStatus: 'FUNDED', extraFunding: { agreedCents: 8000, pendingCents: 4000 } });
@@ -115,24 +117,55 @@ describe('PlanningPage salary month forecast', () => {
     expect(mocks.fundPlanning).not.toHaveBeenCalled();
   });
 
+  it('asistente: si repartir pondría en riesgo un pago, solo se puede aportar ahora', async () => {
+    const user = userEvent.setup();
+    mocks.dashboard.mockResolvedValue(forecast({ fundingBasis: basis() }));
+    mocks.fundingCheck.mockResolvedValue({
+      balanceCents: 0, pendingContributionCents: 0, availableCents: 0, neededCents: 100_000, shortfallCents: 100_000, surplusCents: 0,
+      basis: basis(), shares: [{ personId: 'person-1', personName: 'Pablo', amountCents: 100_000 }],
+      options: [2, 3, 6].map((months) => ({ months, monthlyCents: 1, safe: false, risk: { name: 'Los pagos de este mes', dueDate: null } })),
+    });
+    renderPage();
+
+    await answerStep1(user, { done: true });
+    await user.click(screen.getByRole('button', { name: 'Ver cómo cubrirlo' }));
+    expect(screen.getByRole('radio', { name: /Repartirlo en varios meses/ })).toBeDisabled();
+    expect(screen.getByText(/No es posible sin dejar sin cubrir los pagos de este mes/)).toBeVisible();
+    expect(screen.getByRole('radio', { name: /Aportarlo ahora/ })).toBeChecked();
+  });
+
   it('asistente: con la aportación hecha no la suma, reparte lo que falta en meses y confirma la aportación', async () => {
     const user = userEvent.setup();
     mocks.dashboard.mockResolvedValue(forecast({ fundingBasis: basis() }));
     mocks.createRecovery.mockResolvedValue({ id: 'plan-1' });
     mocks.prepareMonth.mockResolvedValue({ id: 'planning-1', stateVersion: 0 });
+    mocks.fundingCheck.mockResolvedValue({
+      balanceCents: 90_000, pendingContributionCents: 0, availableCents: 90_000, neededCents: 125_000,
+      shortfallCents: 35_000, surplusCents: 0, basis: basis(),
+      shares: [{ personId: 'person-1', personName: 'Pablo', amountCents: 21_000 }, { personId: 'person-2', personName: 'Natalia', amountCents: 14_000 }],
+      options: [
+        { months: 2, monthlyCents: 17_500, safe: true, risk: null },
+        { months: 3, monthlyCents: 11_667, safe: true, risk: null },
+        { months: 6, monthlyCents: 5_834, safe: false, risk: { name: 'Seguro coche', dueDate: '2027-03-02' } },
+      ],
+    });
     renderPage();
 
     await answerStep1(user, { done: true });
+    expect(mocks.fundingCheck).toHaveBeenCalledWith({ householdId: 'household-1', month: '2026-11-01', balanceCents: 90_000, contributionDone: true });
     expect(screen.queryByText('+ Aportación a la conjunta que falta por hacer')).not.toBeInTheDocument();
     expect(screen.getByText('Faltan').nextElementSibling).toHaveTextContent('350,00');
     await user.click(screen.getByRole('button', { name: 'Ver cómo cubrirlo' }));
     await user.click(screen.getByRole('radio', { name: /Repartirlo en varios meses/ }));
-    await user.selectOptions(screen.getByLabelText('Meses'), '4');
-    await user.click(screen.getByRole('button', { name: 'Guardar y repartir en 4 meses' }));
+    // Only safe spreads can be chosen; the unsafe one says which payment it would leave uncovered.
+    expect(screen.getByRole('radio', { name: /6 meses/ })).toBeDisabled();
+    expect(screen.getByText(/6 meses no: «Seguro coche» del 2 mar 2027 no llegaría a cubrirse/)).toBeVisible();
+    await user.click(screen.getByRole('radio', { name: /3 meses/ }));
+    await user.click(screen.getByRole('button', { name: 'Guardar y repartir en 3 meses' }));
 
     await waitFor(() => expect(mocks.fundPlanning).toHaveBeenCalledWith({ householdId: 'household-1', planningId: 'planning-1', scope: 'HOUSEHOLD', expectedVersion: 0 }));
     expect(mocks.createRecovery).toHaveBeenCalledWith({ householdId: 'household-1', body: {
-      deficitCents: 35_000, mode: 'TARGET_MONTHS', targetMonths: 4, startsOn: '2026-11-01',
+      deficitCents: 35_000, mode: 'TARGET_MONTHS', targetMonths: 3, startsOn: '2026-11-01',
       fundingCheck: { balanceCents: 90_000, contributionDone: true, month: '2026-11-01' },
     } });
     // The plan is created before saving, so its adjustment enters this month.

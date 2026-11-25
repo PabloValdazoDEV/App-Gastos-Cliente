@@ -8,7 +8,6 @@ const primaryButton = 'inline-flex min-h-12 items-center justify-center rounded-
 const secondaryButton = 'inline-flex min-h-12 items-center justify-center rounded-xl border border-border-strong px-5 py-3 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 const inputClass = 'mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3';
 const choiceClass = 'flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface p-3 has-[:checked]:border-brand has-[:checked]:bg-brand-soft';
-const RECOVERY_MONTHS = [2, 3, 4, 6, 12];
 
 function Row({ label, cents, currency, strong = false, tone }) {
   return (
@@ -34,6 +33,7 @@ export function PrepareMonthWizard({
   currency,
   error,
   expectedTotalCents,
+  fetchCheck,
   monthLabel,
   onBalanceChange,
   onPersonalBalanceChange,
@@ -45,29 +45,60 @@ export function PrepareMonthWizard({
   const [step, setStep] = useState(1);
   const [contributionDone, setContributionDone] = useState(null);
   const [cover, setCover] = useState('NOW');
-  const [months, setMonths] = useState(3);
+  const [months, setMonths] = useState(null);
   const [stepError, setStepError] = useState('');
+  const [check, setCheck] = useState(null);
+  const [checking, setChecking] = useState(false);
 
   let balanceCents = null;
   try { balanceCents = eurosInputToCents(balance); } catch { balanceCents = null; }
-  const result = basis && balanceCents !== null && contributionDone !== null
-    ? fundingShortfall(basis, { balanceCents, contributionDone })
-    : null;
+  const result = check;
+  const shownBasis = check?.basis ?? basis;
   const shortfall = result?.shortfallCents ?? 0;
-  const shares = splitByContribution(shortfall, basis?.contributions ?? []);
-  const monthly = Math.ceil(shortfall / months);
+  const shares = check?.shares ?? [];
+  const options = check?.options ?? [];
+  const safeOptions = options.filter((option) => option.safe);
+  const unsafeOptions = options.filter((option) => !option.safe);
+  const chosen = options.find((option) => option.months === months);
 
-  function goToResult(event) {
+  // The server answers what is missing, each share and which spreading options
+  // keep every payment covered. An older server without that route: compute
+  // locally and do not offer spreading, since its safety cannot be checked.
+  async function loadCheck() {
+    if (fetchCheck) {
+      try {
+        return await fetchCheck({ balanceCents, contributionDone });
+      } catch (failure) {
+        if (failure?.status !== 404) throw failure;
+      }
+    }
+    const local = fundingShortfall(basis, { balanceCents, contributionDone });
+    return { ...local, basis, shares: splitByContribution(local.shortfallCents, basis.contributions ?? []), options: [] };
+  }
+
+  async function goToResult(event) {
     event.preventDefault();
     if (contributionDone === null) return setStepError('Indica si ya has hecho la aportación de este mes.');
     if (balanceCents === null) return setStepError('Escribe el saldo de la cuenta conjunta, por ejemplo 900,00.');
     setStepError('');
     // An older server sends no funding data: just save the forecast.
     if (!basis) {
-      onSubmit({ balanceCents, contributionDone, cover: 'NONE', shortfallCents: 0, months });
+      onSubmit({ balanceCents, contributionDone, cover: 'NONE', shortfallCents: 0, months: null });
       return;
     }
-    setStep(2);
+    setChecking(true);
+    try {
+      const answer = await loadCheck();
+      setCheck(answer);
+      const firstSafe = (answer.options ?? []).find((option) => option.safe);
+      setMonths(firstSafe?.months ?? null);
+      setCover('NOW');
+      setStep(2);
+    } catch (failure) {
+      setStepError(failure?.message || 'No se ha podido calcular. Inténtalo de nuevo.');
+    } finally {
+      setChecking(false);
+    }
   }
 
   function save(event) {
@@ -81,11 +112,15 @@ export function PrepareMonthWizard({
     });
   }
 
+  const riskText = (option) => option.risk?.dueDate
+    ? `«${option.risk.name}» del ${new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${option.risk.dueDate}T00:00:00Z`))}`
+    : 'los pagos de este mes';
+
   const saveLabel = busy
     ? 'Guardando…'
     : shortfall > 0 && cover === 'NOW'
       ? 'Guardar y añadir el extra'
-      : shortfall > 0 && cover === 'MONTHS'
+      : shortfall > 0 && cover === 'MONTHS' && months
         ? `Guardar y repartir en ${months} meses`
         : 'Guardar previsión del mes';
 
@@ -132,7 +167,7 @@ export function PrepareMonthWizard({
             </details>
           ) : null}
           {stepError ? <p className="text-sm font-semibold text-red-700" role="alert">{stepError}</p> : null}
-          <button className={primaryButton} type="submit">Ver lo que necesitáis</button>
+          <button className={primaryButton} disabled={checking} type="submit">{checking ? 'Calculando…' : 'Ver lo que necesitáis'}</button>
         </form>
       ) : null}
 
@@ -144,19 +179,19 @@ export function PrepareMonthWizard({
             <div className="border-t border-border"><Row cents={result.availableCents} currency={currency} label="Tendréis disponible" strong /></div>
           </dl>
           <dl className="rounded-2xl bg-surface-muted p-4 text-sm">
-            <Row cents={basis.pendingThisMonthCents} currency={currency} label="Pagos que quedan este mes" />
-            {basis.overdueCents > 0 ? <Row cents={basis.overdueCents} currency={currency} label="+ Pagos atrasados de meses anteriores" /> : null}
-            {basis.reserveForLaterCents > 0 ? <Row cents={basis.reserveForLaterCents} currency={currency} label="+ Ahorro para seguros y pagos anuales" /> : null}
+            <Row cents={shownBasis.pendingThisMonthCents} currency={currency} label="Pagos que quedan este mes" />
+            {shownBasis.overdueCents > 0 ? <Row cents={shownBasis.overdueCents} currency={currency} label="+ Pagos atrasados de meses anteriores" /> : null}
+            {shownBasis.reserveForLaterCents > 0 ? <Row cents={shownBasis.reserveForLaterCents} currency={currency} label="+ Ahorro para seguros y pagos anuales" /> : null}
             <div className="border-t border-border"><Row cents={result.neededCents} currency={currency} label="Necesitáis" strong /></div>
             {shortfall > 0
               ? <Row cents={shortfall} currency={currency} label="Faltan" strong tone="text-red-700" />
               : <Row cents={result.surplusCents} currency={currency} label="Sobran" strong tone="text-brand-strong" />}
           </dl>
-          {basis.reserveForLaterLines?.length ? (
+          {shownBasis.reserveForLaterLines?.length ? (
             <details className="rounded-2xl border border-border p-3 text-sm">
               <summary className="min-h-11 cursor-pointer content-center font-bold">Ver el ahorro para pagos grandes</summary>
               <ul className="mt-2 space-y-1">
-                {basis.reserveForLaterLines.map((line) => (
+                {shownBasis.reserveForLaterLines.map((line) => (
                   <li className="flex flex-wrap justify-between gap-2" key={line.expenseId}>
                     <span>{line.name} · {formatCents(line.targetAmountCents, currency)} el {new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${line.dueDate}T00:00:00Z`))}</span>
                     <span className="font-semibold tabular-nums">{formatCents(line.reserveCents, currency)} guardados</span>
@@ -199,20 +234,36 @@ export function PrepareMonthWizard({
                   <span className="text-sm text-text-muted">{shares.map((share) => `${share.personName} ${formatCents(share.amountCents, currency)}`).join(' · ')}</span>
                 </span>
               </label>
-              <label className={choiceClass}>
-                <input checked={cover === 'MONTHS'} className="mt-1 size-4 accent-brand" name="cover" onChange={() => setCover('MONTHS')} type="radio" />
+              <label className={`${choiceClass} ${safeOptions.length ? '' : 'cursor-not-allowed opacity-70'}`}>
+                <input checked={cover === 'MONTHS'} className="mt-1 size-4 accent-brand" disabled={!safeOptions.length} name="cover" onChange={() => setCover('MONTHS')} type="radio" />
                 <span className="min-w-0 flex-1">
                   <span className="block font-bold">Repartirlo en varios meses</span>
-                  <span className="text-sm text-text-muted">Unos {formatCents(monthly, currency)} más al mes en la aportación.</span>
+                  <span className="text-sm text-text-muted">
+                    {safeOptions.length
+                      ? `Solo los repartos que no dejan ningún pago sin cubrir.${chosen ? ` ${formatCents(chosen.monthlyCents, currency)} más al mes.` : ''}`
+                      : options.length
+                        ? `No es posible sin dejar sin cubrir ${riskText(options[0])}. Hay que aportarlo ahora.`
+                        : 'No disponible: no se puede comprobar que ningún pago quede sin cubrir.'}
+                  </span>
                 </span>
               </label>
               {cover === 'MONTHS' ? (
-                <div className="pl-7">
-                  <label className="text-sm font-bold" htmlFor="recovery-months">Meses</label>
-                  <select className={`${inputClass} max-w-40`} id="recovery-months" onChange={(event) => setMonths(Number(event.target.value))} value={months}>
-                    {RECOVERY_MONTHS.map((value) => <option key={value} value={value}>{value} meses</option>)}
-                  </select>
-                </div>
+                <fieldset className="pl-7">
+                  <legend className="text-sm font-bold">¿En cuántos meses?</legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {options.map((option) => (
+                      <label className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold ${option.safe ? 'cursor-pointer border-border-strong has-[:checked]:border-brand has-[:checked]:bg-brand-soft' : 'cursor-not-allowed border-border text-text-muted line-through'}`} key={option.months}>
+                        <input checked={months === option.months} className="size-4 accent-brand" disabled={!option.safe} name="recovery-months" onChange={() => setMonths(option.months)} type="radio" />
+                        {option.months} meses · {formatCents(option.monthlyCents, currency)}/mes
+                      </label>
+                    ))}
+                  </div>
+                  {unsafeOptions.length ? (
+                    <ul className="mt-2 space-y-1 text-xs text-text-muted">
+                      {unsafeOptions.map((option) => <li key={option.months}>{option.months} meses no: {riskText(option)} no llegaría a cubrirse.</li>)}
+                    </ul>
+                  ) : null}
+                </fieldset>
               ) : null}
               <label className={choiceClass}>
                 <input checked={cover === 'NONE'} className="mt-1 size-4 accent-brand" name="cover" onChange={() => setCover('NONE')} type="radio" />

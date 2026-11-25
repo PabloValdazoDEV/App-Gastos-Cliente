@@ -119,6 +119,24 @@ describe('OneTimeExpensesPage: filtros compartidos', () => {
     expect(screen.getByRole('button', { name: 'Añadir gasto puntual' })).toHaveFocus();
   });
 
+  it('un puntual pagado con ahorros se puede guardar sin contar en la previsión', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('heading', { name: 'Reparar ventana' });
+    await user.click(screen.getByRole('button', { name: 'Añadir gasto puntual' }));
+    const counts = screen.getByRole('checkbox', { name: 'Contar en la previsión del mes' });
+    expect(counts).toBeChecked();
+    await user.click(counts);
+    // Without counting, the safety margin no longer applies.
+    expect(screen.queryByRole('checkbox', { name: 'Aplicar margen de seguridad a este gasto' })).not.toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: 'Nombre' }), 'Sofá con ahorros');
+    await user.type(screen.getByLabelText('Importe (€)'), '800');
+    await user.click(screen.getByRole('button', { name: 'Guardar gasto' }));
+    await waitFor(() => expect(mocks.createOneTimeExpense).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.objectContaining({ countsInBudget: false, applySafetyMargin: false, amountCents: 80_000 }),
+    })));
+  });
+
   it('cancela el modal sin guardar, restaura el foco y conserva los filtros del listado', async () => {
     const user = userEvent.setup();
     renderPage();
