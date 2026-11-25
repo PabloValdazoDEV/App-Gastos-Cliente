@@ -448,6 +448,7 @@ function NotificationPreferences({ query }) {
     emailEnabled: true,
     inAppEnabled: true,
     webPushEnabled: false,
+    minimumAmount: '100',
   });
   const [validationError, setValidationError] = useState('');
   const mutation = useMutation({
@@ -466,6 +467,7 @@ function NotificationPreferences({ query }) {
       emailEnabled: query.data.emailEnabled,
       inAppEnabled: query.data.inAppEnabled,
       webPushEnabled: query.data.webPushEnabled,
+      minimumAmount: String(Math.round((query.data.minimumAmountCents ?? 10_000) / 100)),
     });
   }, [query.data]);
 
@@ -522,8 +524,15 @@ function NotificationPreferences({ query }) {
       return;
     }
 
+    const minimumEuros = Number(String(form.minimumAmount).replace(',', '.'));
+    if (!Number.isFinite(minimumEuros) || minimumEuros < 0 || String(form.minimumAmount).trim() === '') {
+      setValidationError('Escribe un importe en euros (0 para avisar de todos los pagos).');
+      return;
+    }
+
     setValidationError('');
     mutation.mutate({
+      minimumAmountCents: Math.round(minimumEuros * 100),
       defaultOffsets: form.defaultOffsets,
       emailEnabled: form.emailEnabled,
       inAppEnabled: form.inAppEnabled,
@@ -566,6 +575,21 @@ function NotificationPreferences({ query }) {
             <WebPushControls preferences={query.data} />
           </div>
         </fieldset>
+
+        <div className="mt-5 max-w-sm">
+          <label className="text-sm font-bold text-text" htmlFor="reminder-minimum-amount">Avisarme de pagos de más de (€)</label>
+          <input
+            aria-describedby="reminder-minimum-amount-help"
+            className="mt-2 min-h-12 w-full rounded-xl border border-border-strong bg-surface px-3"
+            id="reminder-minimum-amount"
+            inputMode="decimal"
+            onChange={(event) => updateField('minimumAmount', event.target.value)}
+            value={form.minimumAmount}
+          />
+          <p className="mt-1 text-xs leading-5 text-text-muted" id="reminder-minimum-amount-help">
+            Los pagos más pequeños no avisan, salvo que actives sus avisos en ese gasto. Pon 0 para que avisen todos.
+          </p>
+        </div>
 
         <fieldset className="mt-5">
           <legend className="text-sm font-bold text-text">Cuándo quieres recibir los avisos</legend>

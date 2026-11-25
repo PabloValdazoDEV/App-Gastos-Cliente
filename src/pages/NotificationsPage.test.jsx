@@ -107,10 +107,16 @@ describe('NotificationsPage', () => {
       screen.getByRole('checkbox', { name: /Correo electrónico/i }),
     );
     await user.click(screen.getByRole('checkbox', { name: '1 día antes' }));
+    // Default threshold: payments above 100 €; lowered to 50 € here.
+    const minimum = screen.getByLabelText('Avisarme de pagos de más de (€)');
+    expect(minimum).toHaveValue('100');
+    await user.clear(minimum);
+    await user.type(minimum, '50');
     await user.click(screen.getByRole('button', { name: 'Guardar preferencias' }));
 
     await waitFor(() =>
       expect(http.patch).toHaveBeenCalledWith('/notification-preferences', {
+        minimumAmountCents: 5_000,
         defaultOffsets: [30, 7],
         emailEnabled: false,
         inAppEnabled: true,
