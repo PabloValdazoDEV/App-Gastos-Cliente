@@ -99,6 +99,24 @@ describe('Calendario interactivo', () => {
     expect(within(pending).getAllByRole('button', { name: 'Marcar como pagado' })).toHaveLength(2);
   });
 
+  it('una factura periódica aparece como prevista, con importe estimado y enlace para apuntarla', async () => {
+    mocks.calendar.mockResolvedValue(calendar([
+      { id: 'sch-1:2026-10-10', scheduleId: 'sch-1', sourceType: 'INVOICE_FORECAST', name: 'Luz', dueDate: '2026-10-10',
+        datePrecision: 'DAY', dateBasis: 'EXPECTED_DATE', amountCents: 8_683, expectedAmountCents: 8_683, actualAmountCents: null,
+        paymentId: null, paymentDate: null, canRegisterPayment: false, canEditPayment: false, scope: 'HOUSEHOLD',
+        category: { name: 'Luz' }, status: 'ESTIMATED' },
+    ]));
+    renderPage();
+
+    const card = (await screen.findByRole('heading', { name: 'Luz' })).closest('li');
+    expect(within(card).getByText(/Prevista hacia el/)).toBeVisible();
+    expect(within(card).getByText('Factura prevista')).toBeVisible();
+    expect(within(card).getByText('Importe estimado')).toBeVisible();
+    expect(within(card).getByText(/≈ 86,83/)).toBeVisible();
+    expect(within(card).getByRole('link', { name: 'Apuntar factura' })).toHaveAttribute('href', '/facturas?periodica=sch-1');
+    expect(within(card).queryByRole('button', { name: 'Marcar como pagado' })).not.toBeInTheDocument();
+  });
+
   it('un vencimiento que aún no se puede pagar explica por qué y lleva a Inicio', async () => {
     mocks.calendar.mockResolvedValue(calendar([
       occurrence({ expenseId: 'srv', name: 'Servidor', dueDate: '2026-09-05', status: 'OVERDUE', canRegisterPayment: false }),

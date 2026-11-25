@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createInvoice: vi.fn(),
+  createInvoiceSchedule: vi.fn(),
+  invoiceSchedules: vi.fn(),
   deleteInvoice: vi.fn(),
   deleteInvoiceDocument: vi.fn(),
   invoiceDocumentContent: vi.fn(),
@@ -21,6 +23,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../features/finance/financeService', () => ({
   financeService: {
     createInvoice: mocks.createInvoice,
+    createInvoiceSchedule: mocks.createInvoiceSchedule,
+    invoiceSchedules: mocks.invoiceSchedules,
     deleteInvoice: mocks.deleteInvoice,
     deleteInvoiceDocument: mocks.deleteInvoiceDocument,
     invoiceDocumentContent: mocks.invoiceDocumentContent,
@@ -63,6 +67,7 @@ function renderPage() {
 describe('InvoicesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.invoiceSchedules.mockResolvedValue([]);
     mocks.listPeople.mockResolvedValue({ people: [{ id: 'ana', name: 'Ana', isActive: true }] });
     mocks.listCategories.mockResolvedValue({
       categories: [{ id: 'category-1', name: 'Luz' }],
@@ -572,5 +577,52 @@ describe('InvoicesPage', () => {
     revokeCallback();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:documento-seguro');
     expect(await screen.findByText(/se ha descargado para que puedas revisarlo/i)).toBeInTheDocument();
+  });
+  it('factura periódica: muestra la próxima con su estimación y «Apuntar factura» la enlaza', async () => {
+    const user = userEvent.setup();
+    mocks.invoiceSchedules.mockResolvedValue([{
+      id: 'schedule-1', name: 'Luz casa', categoryId: 'category-1', category: { name: 'Luz' }, scope: 'HOUSEHOLD',
+      personalPersonId: null, frequency: 'BIMONTHLY', nextExpectedDate: '2027-01-10', isActive: true,
+      estimate: { amountCents: 8_683, basedOn: 3, source: 'SCHEDULE' },
+    }]);
+    mocks.createInvoice.mockResolvedValue({ id: 'invoice-new' });
+    renderPage();
+
+    const item = (await screen.findByRole('heading', { name: 'Luz casa' })).closest('li');
+    expect(within(item).getByText('Bimestral · Luz · Común')).toBeVisible();
+    expect(within(item).getByText(/Próxima hacia el 10 ene 2027/)).toBeVisible();
+    expect(within(item).getByText(/≈ 86,83/)).toBeVisible();
+    await user.click(within(item).getByRole('button', { name: 'Apuntar factura' }));
+
+    const form = screen.getByRole('region', { name: 'Añadir factura de Luz casa' });
+    await user.type(within(form).getByLabelText('Importe de la factura (€)'), '81,00');
+    await user.click(within(form).getByRole('button', { name: 'Guardar factura' }));
+    await waitFor(() => expect(mocks.createInvoice).toHaveBeenCalledWith({
+      householdId: 'household-1',
+      body: expect.objectContaining({ amountCents: 8_100, categoryId: 'category-1', scheduleId: 'schedule-1' }),
+    }));
+  });
+
+  it('factura periódica nueva: bimestral hacia una fecha aproximada', async () => {
+    const user = userEvent.setup();
+    mocks.createInvoiceSchedule.mockResolvedValue({ id: 'schedule-2' });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Nueva factura periódica' }));
+    await user.type(screen.getByLabelText('Nombre'), 'Gas');
+    await user.selectOptions(screen.getByLabelText('Cada cuánto llega'), 'CUSTOM_MONTHS');
+    await user.clear(screen.getByLabelText('Cada (meses)'));
+    await user.type(screen.getByLabelText('Cada (meses)'), '4');
+    await user.clear(screen.getByLabelText('Próxima factura (aprox.)'));
+    await user.type(screen.getByLabelText('Próxima factura (aprox.)'), '2027-02-15');
+    await user.click(screen.getByRole('button', { name: 'Crear factura periódica' }));
+    await waitFor(() => expect(mocks.createInvoiceSchedule).toHaveBeenCalledWith({
+      householdId: 'household-1',
+      body: {
+        name: 'Gas', categoryId: 'category-1', scope: 'HOUSEHOLD', personalPersonId: null,
+        frequency: 'CUSTOM_MONTHS', intervalMonths: 4, intervalWeeks: null,
+        nextExpectedDate: '2027-02-15', endDate: null,
+      },
+    }));
   });
 });

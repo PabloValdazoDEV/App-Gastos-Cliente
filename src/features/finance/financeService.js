@@ -40,6 +40,13 @@ export const financeService = {
   invoices: (householdId) => http.get(`${home(householdId)}/invoices`),
   invoiceStatistics: (householdId) =>
     http.get(`${home(householdId)}/invoices/statistics`),
+  invoiceSchedules: (householdId) => http.get(`${home(householdId)}/invoice-schedules`),
+  createInvoiceSchedule: ({ householdId, body }) =>
+    http.post(`${home(householdId)}/invoice-schedules`, body),
+  updateInvoiceSchedule: ({ householdId, scheduleId, body }) =>
+    http.put(`${home(householdId)}/invoice-schedules/${scheduleId}`, body),
+  deleteInvoiceSchedule: ({ householdId, scheduleId }) =>
+    http.delete(`${home(householdId)}/invoice-schedules/${scheduleId}`),
   createInvoice: ({ householdId, body }) =>
     http.post(`${home(householdId)}/invoices`, body),
   updateInvoice: ({ householdId, invoiceId, body }) =>

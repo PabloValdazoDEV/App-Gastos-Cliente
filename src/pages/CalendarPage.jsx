@@ -25,6 +25,7 @@ const statusConfig = {
   UPCOMING: { label: 'Próximo', icon: Clock3, className: 'bg-brand-soft text-brand-strong' },
   RECORDED: { label: 'Sin pago confirmado', icon: Clock3, className: 'bg-surface-muted text-text-muted' },
   UNCONFIRMED: { label: 'Sin pago confirmado', icon: Clock3, className: 'bg-surface-muted text-text-muted' },
+  ESTIMATED: { label: 'Prevista', icon: Clock3, className: 'bg-surface-muted text-text-muted' },
 };
 
 const sourceDetails = {
@@ -32,6 +33,8 @@ const sourceDetails = {
   VARIABLE_EXPENSE: { label: 'Gasto variable', to: '/gastos/variables', link: 'Ver gastos variables' },
   VARIABLE_SUMMARY: { label: 'Total mensual variable', to: '/gastos/variables', link: 'Ver gastos variables' },
   ONE_TIME_EXPENSE: { label: 'Gasto puntual', to: '/gastos/puntuales', link: 'Ver gastos puntuales' },
+  // Expected bill of a repeating invoice: the link opens its real-bill form.
+  INVOICE_FORECAST: { label: 'Factura prevista', to: (event) => `/facturas?periodica=${encodeURIComponent(event.scheduleId)}`, link: 'Apuntar factura' },
 };
 
 function formatDate(date, monthly = false) {
@@ -196,14 +199,14 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
     <li aria-labelledby={headingId} className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card [overflow-wrap:anywhere] sm:p-5">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-40">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-soft">{event.dateBasis === 'CHARGE_DATE' ? 'Se cobra el ' : event.dateBasis === 'INVOICE_DATE' ? 'Factura del ' : 'Vence el '}{formatDate(event.dueDate, event.datePrecision === 'MONTH')}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-text-soft">{event.dateBasis === 'CHARGE_DATE' ? 'Se cobra el ' : event.dateBasis === 'INVOICE_DATE' ? 'Factura del ' : event.dateBasis === 'EXPECTED_DATE' ? 'Prevista hacia el ' : 'Vence el '}{formatDate(event.dueDate, event.datePrecision === 'MONTH')}</p>
           <h3 className="mt-1 break-words font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" id={headingId} ref={heading} tabIndex={-1}>{event.name}</h3>
           <p className="mt-1 text-xs font-bold text-brand-strong">{purchaseSource ? purchaseFinancialSourceLabel(event.sourceType) : recurring ? 'Gasto recurrente' : source?.label ?? 'Vencimiento'}</p>
           <p className="mt-1 break-words text-sm text-text-muted">{purchaseSource ? purchaseFinancialScopeLabel(event) : event.scope === 'PERSONAL' ? `Personal${event.personalPerson?.name ? ` · ${event.personalPerson.name}` : ''}` : 'Gasto común'}{event.category?.name ? ` · ${event.category.name}` : ''}</p>
         </div>
         <div className="min-w-0 max-w-full">
-          <p className="text-xs text-text-muted">{event.status === 'RECORDED' ? 'Importe registrado' : event.ownershipType === 'SPLIT' ? event.status === 'PAID' ? 'Tu parte pagada' : 'Tu parte prevista' : event.status === 'PAID' ? 'Importe pagado' : 'Importe previsto'}</p>
-          <p className="break-words text-xl font-extrabold">{formatCents(event.status === 'PAID' ? event.actualAmountCents : event.expectedAmountCents ?? event.amountCents, currency)}</p>
+          <p className="text-xs text-text-muted">{event.status === 'ESTIMATED' ? 'Importe estimado' : event.status === 'RECORDED' ? 'Importe registrado' : event.ownershipType === 'SPLIT' ? event.status === 'PAID' ? 'Tu parte pagada' : 'Tu parte prevista' : event.status === 'PAID' ? 'Importe pagado' : 'Importe previsto'}</p>
+          <p className="break-words text-xl font-extrabold">{event.status === 'ESTIMATED' && event.expectedAmountCents == null ? 'Sin datos' : `${event.status === 'ESTIMATED' ? '≈ ' : ''}${formatCents(event.status === 'PAID' ? event.actualAmountCents : event.expectedAmountCents ?? event.amountCents, currency)}`}</p>
         </div>
       </div>
       {event.datePrecision === 'MONTH' ? <MoreInfo className="mt-2">Total del mes completo, sin día concreto. Se muestra si el rango incluye parte de ese mes.</MoreInfo> : null}
@@ -231,7 +234,7 @@ function CalendarEvent({ currency, event, householdId, timezone, onClose, onOpen
       ) : null}
       {canConfirmRecordedPayment ? <RecordedPaymentControl event={event} householdId={householdId} timezone={timezone} /> : null}
       {purchaseSource && event.canAccessPurchase === true && event.purchaseId ? <Link aria-label={`Ver compra: ${event.name}`} className="mt-3 inline-flex min-h-11 max-w-full items-center rounded-lg px-1 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to={`/compras/${encodeURIComponent(event.purchaseId)}`}>Ver compra</Link> : null}
-      {source ? <Link className="mt-3 inline-flex min-h-11 max-w-full items-center rounded-lg px-1 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to={source.to}>{source.link}</Link> : null}
+      {source ? <Link className="mt-3 inline-flex min-h-11 max-w-full items-center rounded-lg px-1 text-sm font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to={typeof source.to === 'function' ? source.to(event) : source.to}>{source.link}</Link> : null}
       {isOpen ? (
         purchaseInstallment ? <div id={formId}><CalendarPurchasePaymentForm currency={currency} event={event} householdId={householdId} key={`${selection.mode}:${paymentId}`} mode={selection.mode} onClose={closeForm} timezone={timezone} /></div> : <PaymentOccurrenceForm
           currency={currency}

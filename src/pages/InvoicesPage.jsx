@@ -38,6 +38,8 @@ import {
 import { startsWithNewForm } from '../features/finance/startsWithNewForm';
 import { suggestedInvoicePeriod } from '../features/finance/invoicePeriod';
 import { MoreInfo } from '../components/ui/MoreInfo';
+import { InvoiceSchedules } from '../features/finance/components/InvoiceSchedules';
+import { invoiceScheduleKey, linkedInvoiceScheduleId } from '../features/finance/invoiceScheduleKey';
 
 const invoiceSchema = z
   .object({
@@ -124,6 +126,7 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all(householdId) }),
+        queryClient.invalidateQueries({ queryKey: invoiceScheduleKey(householdId) }),
         invalidateBudgetQueries(queryClient, householdId),
       ]);
       toast.success(isEditing ? 'Factura actualizada.' : 'Factura añadida al histórico.');
@@ -199,6 +202,8 @@ function InvoiceForm({ categories, creationPreset = null, householdId, initialIn
           notes: values.notes || null,
           periodEnd: values.periodEnd,
           periodStart: values.periodStart,
+          // Registered from a repeating bill: links it and moves its next date.
+          ...(!isEditing && creationPreset?.scheduleId ? { scheduleId: creationPreset.scheduleId } : {}),
           ...(values.scope === 'PERSONAL' || initialInvoice?.scope || creationPreset
             ? {
                 personalPersonId: values.scope === 'PERSONAL' ? values.personalPersonId : null,
@@ -427,6 +432,13 @@ export function InvoicesPage() {
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [registeringSchedule, setRegisteringSchedule] = useState(null);
+  const [linkedScheduleId, setLinkedScheduleId] = useState(linkedInvoiceScheduleId);
+  const schedules = useQuery({
+    enabled: Boolean(householdId),
+    queryFn: () => typeof financeService.invoiceSchedules === 'function' ? financeService.invoiceSchedules(householdId) : [],
+    queryKey: invoiceScheduleKey(householdId),
+  });
   const invoices = useQuery({
     enabled: Boolean(householdId),
     queryFn: () => financeService.invoices(householdId),
@@ -496,6 +508,17 @@ export function InvoicesPage() {
     }
   }, [creatingGroupKey, expandedCategoryId, invoiceGroups]);
 
+  // From the calendar: /facturas?periodica=<id> opens that bill's form once.
+  useEffect(() => {
+    if (!linkedScheduleId || !schedules.data) return;
+    const linked = schedules.data.find((schedule) => schedule.id === linkedScheduleId);
+    if (linked) {
+      setShowForm(false);
+      setRegisteringSchedule(linked);
+    }
+    setLinkedScheduleId(null);
+  }, [linkedScheduleId, schedules.data]);
+
   function closeContextualForm() {
     setCreatingGroupKey(null);
     contextualTriggerRef.current?.focus();
@@ -558,6 +581,39 @@ export function InvoicesPage() {
               onClose={() => setShowForm(false)}
             />
           )
+        ) : null}
+
+        {registeringSchedule ? (
+          <InvoiceForm
+            categories={categories}
+            creationPreset={{
+              categoryId: registeringSchedule.categoryId,
+              categoryName: registeringSchedule.name,
+              personalPersonId: registeringSchedule.personalPersonId,
+              scheduleId: registeringSchedule.id,
+              scope: registeringSchedule.scope,
+            }}
+            householdId={householdId}
+            invoices={invoices.data ?? []}
+            key={registeringSchedule.id}
+            onClose={() => setRegisteringSchedule(null)}
+            people={people}
+          />
+        ) : null}
+
+        {schedules.isSuccess ? (
+          <InvoiceSchedules
+            categories={categories}
+            currency={currency}
+            householdId={householdId}
+            onRegister={(schedule) => {
+              setShowForm(false);
+              setRegisteringSchedule(schedule);
+              window.scrollTo?.({ top: 0, behavior: 'smooth' });
+            }}
+            people={people}
+            schedules={schedules.data ?? []}
+          />
         ) : null}
 
         {statistics.isPending ? <LoadingState label="Calculando estadísticas" /> : null}
