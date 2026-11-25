@@ -13,9 +13,9 @@ import { PageHeader } from '../components/ui/PageHeader';
 
 const secondarySections = [
   {
-    description: 'Tus compras importantes, productos y garantías.',
+    description: 'Tickets y garantías de tus productos. No cuentan en el presupuesto.',
     icon: ShoppingBag,
-    title: 'Compras',
+    title: 'Garantías',
     to: '/compras',
   },
   {

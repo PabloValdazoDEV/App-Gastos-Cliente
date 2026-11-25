@@ -19,7 +19,7 @@ import { MoreInfo } from '../../components/ui/MoreInfo';
 const secondaryButton = 'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-border-strong px-4 py-2.5 text-sm font-bold text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60';
 const percentage = (value) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(value / 100);
 
-export function PurchaseForm({ people = [], initialPurchase = null, initialValues, intakeHints = {}, singleProduct = false, onSubmit, onCancel, isPending = false, error = null, currency = 'EUR', timezone }) {
+export function PurchaseForm({ people = [], initialPurchase = null, initialValues, intakeHints = {}, singleProduct = false, onSubmit, onCancel, isPending = false, error = null, currency = 'EUR', timezone, allowNewFinancing = false }) {
   const editing = Boolean(initialPurchase);
   const formRef = useRef(null);
   const pendingFocus = useRef(null);
@@ -130,7 +130,8 @@ export function PurchaseForm({ people = [], initialPurchase = null, initialValue
         <TextareaField disabled={pending} error={errors.notes?.message} label="Notas de la compra (opcional)" maxLength={2000} {...register('notes')} />
       </fieldset>
 
-      <PurchasePaymentFields currency={currency} disabled={pending} errors={errors} initialPurchase={initialPurchase} register={register} timezone={timezone} watch={watch} />
+      {/* Financing is now a recurring expense with an end date: only legacy financed purchases keep the option. */}
+      <PurchasePaymentFields allowFinancing={allowNewFinancing || initialPurchase?.paymentMethod === 'FINANCED'} currency={currency} disabled={pending} errors={errors} initialPurchase={initialPurchase} register={register} timezone={timezone} watch={watch} />
 
       <fieldset className="min-w-0 space-y-4" disabled={pending}>
         <legend className="mb-2 text-lg font-extrabold text-text">¿De quién es?</legend>

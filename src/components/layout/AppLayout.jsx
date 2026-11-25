@@ -135,7 +135,7 @@ export function AppLayout() {
   useEffect(() => {
     const isPurchasePage = location.pathname === '/compras' || location.pathname.startsWith('/compras/');
     document.title = activeDestination
-      ? `${isPurchasePage ? 'Compras' : activeDestination.label} · ${publicEnv.appName}`
+      ? `${isPurchasePage ? 'Garantías' : activeDestination.label} · ${publicEnv.appName}`
       : `Página no encontrada · ${publicEnv.appName}`;
 
     if (previousPath.current === location.pathname) return;

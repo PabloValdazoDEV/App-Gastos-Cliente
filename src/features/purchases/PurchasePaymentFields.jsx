@@ -6,7 +6,7 @@ import { purchasePaymentToday } from './purchaseInstallmentFormState';
 import { financingPreview, hasRecordedFinancingPayments, MAX_PURCHASE_INSTALLMENTS, paymentAmountCents } from './purchasePaymentForm';
 import { MoreInfo } from '../../components/ui/MoreInfo';
 
-export function PurchasePaymentFields({ register, watch, errors, disabled, initialPurchase = null, currency = 'EUR', timezone }) {
+export function PurchasePaymentFields({ register, watch, errors, disabled, initialPurchase = null, currency = 'EUR', timezone, allowFinancing = true }) {
   const id = useId();
   const method = watch('paymentMethod');
   const upfrontPaid = watch('upfrontPaid');
@@ -21,7 +21,7 @@ export function PurchasePaymentFields({ register, watch, errors, disabled, initi
     <fieldset className="min-w-0 max-w-full space-y-5" disabled={disabled}>
       <legend className="mb-4 text-lg font-extrabold text-text">Forma de pago</legend>
       <div aria-describedby={locked ? `${id}-history` : undefined} className="grid min-w-0 gap-2 sm:grid-cols-2">
-        {[['UPFRONT', 'Al contado'], ['FINANCED', 'Financiado']].map(([value, label]) => <label className={`flex min-h-12 min-w-0 items-center gap-3 rounded-xl border border-border-strong px-3 py-2.5 text-sm font-bold has-[:checked]:border-brand has-[:checked]:bg-brand-soft ${locked ? 'cursor-not-allowed text-text-muted' : 'cursor-pointer'}`} key={value}>
+        {[['UPFRONT', 'Al contado'], ...(allowFinancing ? [['FINANCED', 'Financiado']] : [])].map(([value, label]) => <label className={`flex min-h-12 min-w-0 items-center gap-3 rounded-xl border border-border-strong px-3 py-2.5 text-sm font-bold has-[:checked]:border-brand has-[:checked]:bg-brand-soft ${locked ? 'cursor-not-allowed text-text-muted' : 'cursor-pointer'}`} key={value}>
           <input className="size-5 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" disabled={disabled || locked} type="radio" value={value} {...register('paymentMethod')} />{label}
         </label>)}
       </div>

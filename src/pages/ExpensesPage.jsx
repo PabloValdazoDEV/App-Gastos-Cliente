@@ -1,4 +1,4 @@
-import { CalendarRange, ChevronRight, Package, Plus, Receipt, ReceiptText, ShoppingBasket } from 'lucide-react';
+import { CalendarRange, ChevronRight, Plus, Receipt, ReceiptText, ShoppingBasket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader';
@@ -37,14 +37,6 @@ const expenseTypes = [
     title: 'Puntual',
     listLabel: 'Ver puntuales',
     to: '/gastos/puntuales',
-  },
-  {
-    examples: 'Electrodoméstico, móvil, mueble',
-    hint: 'Un producto con garantía, ticket o pago a plazos.',
-    icon: Package,
-    title: 'Compra',
-    listLabel: 'Ver compras',
-    to: '/compras',
   },
 ];
 

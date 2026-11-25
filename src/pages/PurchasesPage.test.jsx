@@ -38,9 +38,9 @@ describe('PurchasesPage', () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: 'Todavía no has guardado ninguna compra' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: 'Añadir compra' })).toHaveLength(1);
-    expect(screen.queryByText(/IA|OCR|documentos|financiación/)).not.toBeInTheDocument();
-    // Secondary explanation: present but folded under "Ver más".
-    expect(screen.getByText(/El presupuesto recoge los pagos de cada mes/)).toBeInTheDocument();
+    expect(screen.queryByText(/IA|OCR/)).not.toBeInTheDocument();
+    // Warranties live outside the budget; the explanation says where payments go.
+    expect(screen.getByText(/No cuenta en el presupuesto/)).toBeInTheDocument();
   });
 
   it('muestra carga sin inventar compras', () => {

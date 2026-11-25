@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { ExpensesPage } from './ExpensesPage';
 
 describe('ExpensesPage: ¿qué quieres apuntar?', () => {
-  it('muestra los cinco tipos con ejemplos y un acceso directo para añadir y otro para ver la lista', () => {
+  it('muestra los cuatro tipos con ejemplos y un acceso directo para añadir y otro para ver la lista', () => {
     render(<MemoryRouter><ExpensesPage /></MemoryRouter>);
     expect(screen.getByRole('heading', { name: '¿Qué quieres apuntar?' })).toBeInTheDocument();
 
@@ -14,7 +14,6 @@ describe('ExpensesPage: ¿qué quieres apuntar?', () => {
       ['Recurrente', /Alquiler/, '/gastos/recurrentes'],
       ['Factura', /Luz/, '/facturas'],
       ['Puntual', /Dentista/, '/gastos/puntuales'],
-      ['Compra', /Electrodoméstico/, '/compras'],
     ];
     const items = within(screen.getByRole('list', { name: 'Tipos de gasto' })).getAllByRole('listitem');
     expect(items).toHaveLength(expected.length);

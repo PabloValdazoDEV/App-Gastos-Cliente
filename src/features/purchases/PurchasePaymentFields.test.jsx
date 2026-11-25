@@ -6,10 +6,12 @@ import { PurchaseForm } from './PurchaseForm';
 
 const purchase = { id: 'purchase', totalCents: 120000, purchaseDate: '2026-09-17', ownershipType: 'HOUSEHOLD', shares: [], items: [{ id: 'phone', name: 'Móvil', quantity: 1 }], paymentMethod: 'FINANCED', financing: { provider: 'Banco', downPaymentCents: 20000, downPaymentPaidAt: null, financedPrincipalCents: 100000, installmentCount: 20, installmentAmountCents: 5500, firstInstallmentDate: '2026-10-15', financingTotalCents: 110000, installments: [{ status: 'PLANNED' }], progress: { paidInstallmentCount: 0 } } };
 
+// These tests exercise the financing logic, still used by legacy financed
+// purchases; new purchases no longer offer it (see the test below).
 function setup(props = {}) {
   const onSubmit = vi.fn().mockResolvedValue({});
   const onCancel = vi.fn();
-  const view = render(<PurchaseForm people={[]} onSubmit={onSubmit} onCancel={onCancel} {...props} />);
+  const view = render(<PurchaseForm allowNewFinancing people={[]} onSubmit={onSubmit} onCancel={onCancel} {...props} />);
   return { ...view, onSubmit, onCancel, user: userEvent.setup() };
 }
 
@@ -31,6 +33,12 @@ async function fillFinancing(user) {
 }
 
 describe('purchase payment fields', () => {
+  it('una compra nueva solo se apunta al contado: la financiación va como gasto recurrente con fin', () => {
+    render(<PurchaseForm onCancel={vi.fn()} onSubmit={vi.fn()} people={[]} />);
+    expect(screen.getByRole('radio', { name: 'Al contado' })).toBeChecked();
+    expect(screen.queryByRole('radio', { name: 'Financiado' })).not.toBeInTheDocument();
+  });
+
   it('has two visible keyboard-accessible payment methods and shows only upfront fields initially', async () => {
     const { user } = setup();
     expect(screen.getByRole('group', { name: 'Forma de pago' })).toBeInTheDocument();

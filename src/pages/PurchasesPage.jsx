@@ -58,7 +58,7 @@ function PurchasesContent({ household }) {
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader eyebrow="Compras y garantías" title="Compras" description="Ten localizados tus productos, garantías y pagos. El presupuesto recoge los pagos de cada mes, no el precio completo de una compra financiada." />
+        <PageHeader eyebrow="Más" title="Garantías" description="Guarda el ticket y la garantía de tus productos. No cuenta en el presupuesto: un pago grande va en Gastos puntuales y una financiación, como gasto recurrente con fecha de fin." />
         {!showForm && purchases.data?.length > 0 ? addButton : null}
       </div>
       {showForm ? <div ref={formRef}>
@@ -71,7 +71,7 @@ function PurchasesContent({ household }) {
       </div> : null}
       {purchases.isPending ? <LoadingState label="Cargando compras" /> : purchases.isError ? <ErrorState title="No se han podido cargar las compras" description={purchases.error.message} onRetry={purchases.refetch} /> : purchases.data.length === 0 ? (
         !showForm ? <EmptyState title="Todavía no has guardado ninguna compra" description="Guarda compras importantes para tener localizados sus productos y garantías." icon={ShoppingBag} action={addButton} /> : null
-      ) : <section aria-label="Compras guardadas" className="min-w-0 space-y-4">
+      ) : <section aria-label="Garantías guardadas" className="min-w-0 space-y-4">
         <PurchaseFilters search={search} ownership={ownership} warranty={warranty} onSearchChange={setSearch} onOwnershipChange={setOwnership} onWarrantyChange={setWarranty} />
         <p aria-live="polite" className="text-sm text-text-muted">{visible.length} {visible.length === 1 ? 'compra' : 'compras'} · Por fecha de compra, agrupadas por año y mes · Más recientes primero</p>
         {visible.length === 0 ? <p className="rounded-2xl border border-dashed border-border-strong p-5 text-sm text-text-muted">No hay compras que coincidan. Prueba otra búsqueda o limpia los filtros.</p> : <MonthGroupedList items={visible} getDate={(purchase) => purchase.purchaseDate} yearHeadingLevel={2} listClassName="grid min-w-0 gap-4 lg:grid-cols-2"
@@ -96,6 +96,6 @@ export function PurchasesPage() {
   const household = useHousehold();
   if (household.isPending) return <LoadingState label="Cargando hogar" />;
   if (household.isError) return <ErrorState title="No se ha podido cargar el hogar" description={household.error?.message} onRetry={household.refetch} />;
-  if (!household.currentHousehold) return <div className="space-y-6"><PageHeader title="Compras" /><EmptyState title="Necesitas un hogar" description="Crea o selecciona un hogar para guardar tus compras y garantías." icon={ShoppingBag} /></div>;
+  if (!household.currentHousehold) return <div className="space-y-6"><PageHeader title="Garantías" /><EmptyState title="Necesitas un hogar" description="Crea o selecciona un hogar para guardar tus compras y garantías." icon={ShoppingBag} /></div>;
   return <PurchasesContent household={household.currentHousehold} key={household.currentHousehold.id} />;
 }

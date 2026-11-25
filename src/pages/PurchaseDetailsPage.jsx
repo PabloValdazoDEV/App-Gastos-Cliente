@@ -128,7 +128,7 @@ function PurchaseDetailsContent({ household, purchaseId }) {
     setConfirmation({ mode, item });
   };
   const closeConfirmation = () => { setConfirmation(null); triggerRef.current?.focus(); };
-  const backLink = <Link className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold text-brand-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to="/compras"><ArrowLeft aria-hidden="true" className="size-4" />Volver a Compras</Link>;
+  const backLink = <Link className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold text-brand-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" to="/compras"><ArrowLeft aria-hidden="true" className="size-4" />Volver a Garantías</Link>;
 
   if (purchaseQuery.isPending) return <div className="space-y-6">{backLink}<LoadingState label="Cargando compra" /></div>;
   if (purchaseQuery.isError) return <div className="space-y-6">{backLink}<ErrorState title="No se puede abrir esta compra" description={purchaseQuery.error?.status === 404 ? 'Puede estar archivada o no estar disponible para ti en este hogar.' : purchaseQuery.error.message} onRetry={purchaseQuery.refetch} /></div>;
@@ -140,10 +140,10 @@ function PurchaseDetailsContent({ household, purchaseId }) {
   return (
     <div className="min-w-0 space-y-6">
       {backLink}
-      <div className="min-w-0 [overflow-wrap:anywhere]"><PageHeader eyebrow="Compras y garantías" title={purchaseTitle(purchase)} description="El precio describe lo comprado. Su forma de pago determina el presupuesto y el gasto registrado de cada mes." /></div>
+      <div className="min-w-0 [overflow-wrap:anywhere]"><PageHeader eyebrow="Garantías" title={purchaseTitle(purchase)} description={purchase.paymentMethod === 'FINANCED' ? 'El precio describe lo comprado. Sus cuotas cuentan en el presupuesto y el gasto de cada mes.' : 'Ticket y garantía del producto. No cuenta en el presupuesto.'} /></div>
       {confirmation ? <PurchaseConfirmation
         title={confirmation.mode === 'archive' ? '¿Archivar esta compra?' : `¿Eliminar ${confirmation.item.name}?`}
-        description={confirmation.mode === 'archive' ? 'Dejará de aparecer en Compras. Se conservarán sus datos, productos y documentos, pero no podrás consultarlos desde la aplicación mientras esté archivada. Los pagos registrados conservan su historial financiero; las obligaciones pendientes dejan de incluirse en el presupuesto y el calendario. Archivar no cancela una deuda con la entidad ni cambia los saldos.' : 'Este producto se eliminará de la compra. Sus documentos se conservarán asociados a la compra completa. Los demás productos y el total registrado no cambiarán.'}
+        description={confirmation.mode === 'archive' ? 'Dejará de aparecer en Garantías. Se conservarán sus datos, productos y documentos, pero no podrás consultarlos desde la aplicación mientras esté archivada. Los pagos registrados conservan su historial financiero; las obligaciones pendientes dejan de incluirse en el presupuesto y el calendario. Archivar no cancela una deuda con la entidad ni cambia los saldos.' : 'Este producto se eliminará de la compra. Sus documentos se conservarán asociados a la compra completa. Los demás productos y el total registrado no cambiarán.'}
         confirmLabel={confirmation.mode === 'archive' ? 'Archivar compra' : 'Eliminar producto'}
         error={confirmation.mode === 'archive' ? archive.error : deleteItem.error}
         isPending={confirmation.mode === 'archive' ? archive.isPending : deleteItem.isPending}

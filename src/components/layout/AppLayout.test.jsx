@@ -215,7 +215,7 @@ describe('AppLayout', () => {
       </WithHousehold>,
     );
     screen.getAllByRole('link', { name: 'Más' }).forEach((link) => expect(link).toHaveAttribute('aria-current', 'page'));
-    expect(document.title).toMatch(/^Compras · /);
+    expect(document.title).toMatch(/^Garantías · /);
     expect(within(screen.getByRole('navigation', { name: 'Navegación principal móvil' })).getAllByRole('link')).toHaveLength(5);
   });
 });
