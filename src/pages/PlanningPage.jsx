@@ -11,6 +11,7 @@ import { ContributionBreakdown } from '../features/finance/components/Contributi
 import { PlanningBudgetDetails } from '../features/finance/components/PlanningBudgetDetails';
 import { PlanningCorrections } from '../features/finance/components/PlanningCorrections';
 import { PlanningExtras } from '../features/finance/components/PlanningExtras';
+import { PrepareMonthWizard } from '../features/finance/components/PrepareMonthWizard';
 import { isPlanningMonth, nextPlanningMonth, planningMonthLabel } from '../features/finance/planningMonth';
 import { financeService } from '../features/finance/financeService';
 import { eurosInputToCents, formatCents, isoDate } from '../features/finance/money';
@@ -41,13 +42,49 @@ function MonthPlanning({ currentHousehold, month }) {
     queryFn: () => financeService.dashboard(householdId, calculationDate),
     enabled: Boolean(householdId),
   });
+  // Step 3 of "Preparar el mes": save the forecast and apply the chosen way
+  // of covering a shortfall. A recovery plan is created first so this month's
+  // saved contributions already include its adjustment.
   const prepare = useMutation({
-    mutationFn: financeService.prepareMonth,
-    onSuccess: () => {
+    mutationFn: async ({ balanceCents, contributionDone, cover, shortfallCents, months, people }) => {
+      const confirmedPersonalBalances = people.map((person) => ({
+        personId: person.personId,
+        balanceCents: eurosInputToCents(personalBalances[person.personId] || '0'),
+      }));
+      if (cover === 'MONTHS') {
+        await financeService.createRecovery({ householdId, body: {
+          deficitCents: shortfallCents, mode: 'TARGET_MONTHS', targetMonths: months, startsOn: calculationDate,
+          fundingCheck: { balanceCents, contributionDone, month: calculationDate },
+        } });
+      }
+      let saved = await financeService.prepareMonth({ householdId, body: {
+        calculationDate, confirmedBalanceCents: balanceCents, confirmedPersonalBalances,
+      } });
+      if (cover === 'NOW') {
+        saved = await financeService.createPlanningExtra({ householdId, planningId: saved.id, body: {
+          id: crypto.randomUUID(), amountCents: shortfallCents, expectedVersion: saved.stateVersion ?? 0,
+          reason: 'Cubrir lo que falta este mes',
+        } });
+      }
+      if (contributionDone) {
+        await financeService.fundPlanning({ householdId, planningId: saved.id, scope: 'HOUSEHOLD',
+          ...(saved.stateVersion === undefined ? {} : { expectedVersion: saved.stateVersion }) });
+      }
+      return { cover };
+    },
+    onSuccess: ({ cover }) => {
       refresh(['dashboard', householdId]);
       refresh(['plannings', householdId]);
-      if (mountedRef.current) toast.success('Previsión del mes guardada. Sus aportaciones quedan fijadas.');
+      if (mountedRef.current) {
+        toast.success(cover === 'NOW'
+          ? 'Previsión guardada con un extra para cubrir lo que falta.'
+          : cover === 'MONTHS'
+            ? 'Previsión guardada. Lo que falta se reparte en los próximos meses.'
+            : 'Previsión del mes guardada. Sus aportaciones quedan fijadas.');
+      }
     },
+    // A step may have been saved before the failure: show the real state.
+    onError: () => refresh(['dashboard', householdId]),
   });
   const fund = useMutation({
     mutationFn: financeService.fundPlanning,
@@ -129,87 +166,27 @@ function MonthPlanning({ currentHousehold, month }) {
           </details> : null}
         </section>
       ) : (
-        <section className="rounded-3xl border border-border bg-surface p-5 shadow-card sm:p-7" aria-labelledby="confirmar-saldos">
-          <h2 className="text-lg font-bold" id="confirmar-saldos">Preparar las transferencias de {planningMonthLabel(month)}</h2>
-          <MoreInfo className="mt-2"><p>Revisa la previsión del día 1 al último día del mes que vas a financiar. Guarda el cálculo antes de confirmar las transferencias. No se consulta tu banco ni se mueve dinero.</p><p className="mt-2">Los saldos se registran como referencia de cobertura: no se descuentan automáticamente de esta aportación, porque pueden estar reservados para otros pagos o para el colchón. Las medias variables usan meses terminados; cuando faltan 3 días o menos para acabar el mes, también incluyen su gasto registrado como cierre estimado para preparar el siguiente.</p></MoreInfo>
-          <dl className="mt-5 grid gap-3 rounded-2xl bg-surface-muted p-4 sm:grid-cols-3">
-            <div>
-              <dt className="text-xs font-semibold text-text-muted">Previsión conjunta y tus gastos personales</dt>
-              <dd className="mt-1 font-extrabold">{formatCents(data.budget.recommendedBudgetCents, currency)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold text-text-muted">Ajuste temporal</dt>
-              <dd className="mt-1 font-extrabold">{formatCents(activeAdjustmentCents, currency)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold text-text-muted">Total calculado</dt>
-              <dd className="mt-1 font-extrabold">{formatCents(expectedTotalCents, currency)}</dd>
-            </div>
-          </dl>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {people.map((person) => <article className="min-w-0 rounded-2xl bg-surface-muted p-4" key={person.personId}>
-              <h3 className="break-words font-bold">{person.personName}</h3>
-              <ContributionBreakdown currency={currency} householdCents={person.standardHouseholdCents} personalCents={person.personalExpenseCents} personalAmountsHidden={person.personalAmountsHidden} totalCents={person.totalStandardCents} totalLabel="Previsión antes de guardar" pendingAdjustment={activeAdjustmentCents > 0} />
-            </article>)}
-          </div>
-          <form
-            className="mt-6 grid gap-4 sm:grid-cols-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              try {
-                prepare.mutate({
-                  householdId,
-                  body: {
-                    calculationDate,
-                    confirmedBalanceCents: eurosInputToCents(balance),
-                    confirmedPersonalBalances: people.map((person) => ({
-                      personId: person.personId,
-                      balanceCents: eurosInputToCents(personalBalances[person.personId] ?? ''),
-                    })),
-                  },
-                });
-              } catch (error) {
-                toast.error(error.message);
-              }
-            }}
-          >
-            {/* Balances come from Cuentas: show them as one line and only open the inputs to correct them. */}
-            <details className="rounded-2xl border border-border p-3 sm:col-span-2">
-              <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-                <span className="font-bold">Saldos de Cuentas:</span>
-                <span className="text-text-muted">conjunta {balance || '0,00'} €{people.map((person) => ` · ${person.personName} ${personalBalances[person.personId] || '0,00'} €`).join('')}</span>
-                <span className="font-bold text-brand-strong underline">Corregir</span>
-              </summary>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-sm font-bold" htmlFor="planning-balance">Saldo de la cuenta conjunta</label>
-                  <input className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3" id="planning-balance" inputMode="decimal" onChange={(event) => setBalance(event.target.value)} required value={balance} />
-                </div>
-                {people.map((person) => (
-                  <div key={person.personId}>
-                    <label className="text-sm font-bold" htmlFor={`planning-balance-${person.personId}`}>
-                      Saldo personal de {person.personName}
-                    </label>
-                    <input
-                      className="mt-2 min-h-12 w-full rounded-xl border border-border-strong px-3"
-                      id={`planning-balance-${person.personId}`}
-                      inputMode="decimal"
-                      onChange={(event) => setPersonalBalances((current) => ({ ...current, [person.personId]: event.target.value }))}
-                      required
-                      value={personalBalances[person.personId] ?? ''}
-                    />
-                  </div>
-                ))}
-              </div>
-            </details>
-            <div className="sm:col-span-2">
-              <button className="min-h-12 rounded-xl bg-brand px-5 py-3 text-sm font-bold text-on-brand hover:bg-brand-hover disabled:opacity-60" disabled={prepare.isPending} type="submit">
-                {prepare.isPending ? 'Guardando…' : 'Guardar previsión del mes'}
-              </button>
-            </div>
-            {prepare.isError ? <p className="text-sm text-red-700 sm:col-span-2" role="alert">{prepare.error.message}</p> : null}
-          </form>
-        </section>
+        <PrepareMonthWizard
+          balance={balance}
+          basis={data.fundingBasis}
+          busy={prepare.isPending}
+          currency={currency}
+          error={prepare.isError ? prepare.error.message : ''}
+          expectedTotalCents={expectedTotalCents}
+          monthLabel={planningMonthLabel(month)}
+          onBalanceChange={setBalance}
+          onPersonalBalanceChange={(personId, value) => setPersonalBalances((current) => ({ ...current, [personId]: value }))}
+          onSubmit={(answers) => {
+            try {
+              prepare.mutate({ ...answers, people });
+            } catch (error) {
+              toast.error(error.message);
+            }
+          }}
+          people={people}
+          personalBalances={personalBalances}
+          pendingAdjustment={activeAdjustmentCents > 0}
+        />
       )}
 
       {displayedPlanning ? (
