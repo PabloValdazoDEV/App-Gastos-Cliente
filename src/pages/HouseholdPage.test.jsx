@@ -175,6 +175,40 @@ describe('HouseholdPage', () => {
     );
   });
 
+  it('reparte según el sueldo bruto anual y muestra cuánto aporta cada uno antes de guardar', async () => {
+    const user = userEvent.setup();
+    useHousehold.mockReturnValue({
+      currentHousehold: household, households: [household], isPending: false, isError: false, refetch: vi.fn(), selectHousehold: vi.fn(),
+    });
+    householdService.get.mockResolvedValue(household);
+    householdService.listPeople.mockResolvedValue({ contributionMode: 'PERCENTAGE', people });
+    householdService.listInvitations.mockResolvedValue([]);
+    householdService.updateDistribution.mockResolvedValue({
+      contributionMode: 'INCOME',
+      people: [{ ...people[0], contributionBps: 6000, annualGrossIncomeCents: 3_000_000 }, { ...people[1], contributionBps: 4000, annualGrossIncomeCents: 2_000_000 }],
+      totals: { totalContributionBps: 10000 },
+    });
+
+    renderPage();
+    await user.click(await screen.findByRole('radio', { name: /Según el sueldo bruto anual/ }));
+    await user.type(screen.getByRole('textbox', { name: /Bruto anual.*Ana/i }), '30.000');
+    await user.type(screen.getByRole('textbox', { name: /Bruto anual.*Bruno/i }), '20.000');
+    expect(screen.getByText('Aporta el 60 %')).toBeVisible();
+    expect(screen.getByText('Reparto: Ana 60 % · Bruno 40 %')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Guardar reparto completo' }));
+
+    await waitFor(() => expect(householdService.updateDistribution).toHaveBeenCalledWith({
+      householdId,
+      body: {
+        contributionMode: 'INCOME',
+        people: [
+          { personId: people[0].id, isActive: true, annualGrossIncomeCents: 3_000_000 },
+          { personId: people[1].id, isActive: true, annualGrossIncomeCents: 2_000_000 },
+        ],
+      },
+    }));
+  });
+
   it('añade una persona inactiva sin romper el reparto existente', async () => {
     const user = userEvent.setup();
     useHousehold.mockReturnValue({

@@ -28,6 +28,7 @@ import { AuthError } from '../features/auth/components/AuthFeedback';
 import { FormField } from '../features/auth/components/FormField';
 import { invalidateBudgetQueries } from '../features/finance/invalidateBudgetQueries';
 import { householdService } from '../features/households/householdService';
+import { incomeInputToCents, incomePreviewBps } from '../features/households/incomeSplit';
 import { useHousehold } from '../features/households/useHousehold';
 import { ConfirmationDialog } from './expensePageShared';
 
@@ -220,7 +221,7 @@ function HouseholdSummary({ household }) {
         <div className="rounded-2xl bg-on-brand/10 p-4">
           <dt className="text-xs font-semibold text-on-brand-muted">Tipo de reparto</dt>
           <dd className="mt-1 font-extrabold">
-            {household.contributionMode === 'FIXED' ? 'Porcentaje pendiente de revisar' : 'Porcentaje'}
+            {household.contributionMode === 'FIXED' ? 'Porcentaje pendiente de revisar' : household.contributionMode === 'INCOME' ? 'Según el sueldo bruto anual' : 'Porcentaje'}
           </dd>
         </div>
         <div className="rounded-2xl bg-on-brand/10 p-4">
@@ -349,12 +350,15 @@ function buildDistributionDraft(people) {
     active: person.isActive,
     contributionBps: person.contributionBps,
     percentage: bpsToPercent(person.contributionBps),
+    income: Number.isInteger(person.annualGrossIncomeCents)
+      ? (person.annualGrossIncomeCents / 100).toLocaleString('es-ES', { maximumFractionDigits: 2 })
+      : '',
   }));
 }
 
 function DistributionEditor({ householdId, initialMode, people, canManage }) {
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState('PERCENTAGE');
+  const [mode, setMode] = useState(initialMode === 'INCOME' ? 'INCOME' : 'PERCENTAGE');
   const [draft, setDraft] = useState(() => buildDistributionDraft(people));
   const [validationError, setValidationError] = useState('');
   const mutation = useMutation({
@@ -366,12 +370,14 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
       );
       queryClient.invalidateQueries({ queryKey: queryKeys.households.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.households.detail(householdId) });
+      // New percentages change every contribution.
+      invalidateBudgetQueries(queryClient, householdId);
       toast.success('Reparto actualizado para todas las personas.');
     },
   });
 
   useEffect(() => {
-    setMode('PERCENTAGE');
+    setMode(initialMode === 'INCOME' ? 'INCOME' : 'PERCENTAGE');
     setDraft(buildDistributionDraft(people));
     setValidationError('');
   }, [initialMode, people]);
@@ -388,6 +394,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
       }, 0),
     [draft],
   );
+  const incomeBps = useMemo(() => incomePreviewBps(draft), [draft]);
   function changePerson(personId, field, value) {
     setDraft((current) =>
       current.map((person) =>
@@ -401,14 +408,18 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
 
     try {
       const updates = draft.map((person) => {
-        if (mode === 'PERCENTAGE') {
+        if (mode === 'INCOME') {
           return {
             personId: person.id,
             isActive: person.active,
-            contributionBps: percentToBps(person.percentage || '0'),
+            annualGrossIncomeCents: person.active ? incomeInputToCents(person.income || '0') : null,
           };
         }
-
+        return {
+          personId: person.id,
+          isActive: person.active,
+          contributionBps: percentToBps(person.percentage || '0'),
+        };
       });
       const activeUpdates = updates.filter((person) => person.isActive);
 
@@ -418,6 +429,10 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
           10000
       ) {
         throw new Error('Los porcentajes de las personas activas deben sumar exactamente 100 %.');
+      }
+
+      if (mode === 'INCOME' && !activeUpdates.some((person) => person.annualGrossIncomeCents > 0)) {
+        throw new Error('Escribe el sueldo bruto anual de al menos una persona que participe.');
       }
 
       setValidationError('');
@@ -464,6 +479,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {[
             ['PERCENTAGE', 'Porcentaje', 'Las personas activas deben sumar 100 %.'],
+            ['INCOME', 'Según el sueldo bruto anual', 'Cada uno aporta en proporción a lo que gana. Solo lo ven quienes administran el hogar.'],
           ].map(([value, label, description]) => (
             <label
               className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border p-4 ${
@@ -515,6 +531,26 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
                   </span>
                 </span>
               </label>
+              {mode === 'INCOME' ? (
+                <div className="sm:w-56">
+                  <label className="mb-1.5 block text-sm font-bold text-text" htmlFor={`income-${person.id}`}>
+                    Bruto anual (€)
+                    <span className="sr-only"> de {person.name}</span>
+                  </label>
+                  <input
+                    className={inputClass}
+                    disabled={!person.active}
+                    id={`income-${person.id}`}
+                    inputMode="decimal"
+                    onChange={(event) => changePerson(person.id, 'income', event.target.value)}
+                    placeholder="30.000"
+                    value={person.income}
+                  />
+                  {person.active && incomeBps.has(person.id) ? (
+                    <p className="mt-1 text-xs font-bold text-brand-strong">Aporta el {(incomeBps.get(person.id) / 100).toLocaleString('es-ES')} %</p>
+                  ) : null}
+                </div>
+              ) : (
               <div className="sm:w-48">
                 <label
                   className="mb-1.5 block text-sm font-bold text-text"
@@ -538,6 +574,7 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
                   value={person.percentage}
                 />
               </div>
+              )}
             </div>
           </li>
         ))}
@@ -554,7 +591,9 @@ function DistributionEditor({ householdId, initialMode, people, canManage }) {
         >
           {mode === 'PERCENTAGE'
             ? `Total activo: ${(percentageTotal / 100).toLocaleString('es-ES')} %`
-            : `${draft.filter((person) => person.active).length} personas activas`}
+            : incomeBps.size
+              ? `Reparto: ${draft.filter((person) => incomeBps.has(person.id)).map((person) => `${person.name} ${(incomeBps.get(person.id) / 100).toLocaleString('es-ES')} %`).join(' · ')}`
+              : 'Escribe el bruto anual de cada persona'}
         </p>
         <button
           className={primaryButton}
