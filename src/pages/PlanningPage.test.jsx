@@ -123,7 +123,7 @@ describe('PlanningPage salary month forecast', () => {
     renderPage();
 
     await answerStep1(user, { done: true });
-    expect(screen.queryByText('+ Aportaciones que faltan por hacer')).not.toBeInTheDocument();
+    expect(screen.queryByText('+ Aportación a la conjunta que falta por hacer')).not.toBeInTheDocument();
     expect(screen.getByText('Faltan').nextElementSibling).toHaveTextContent('350,00');
     await user.click(screen.getByRole('button', { name: 'Ver cómo cubrirlo' }));
     await user.click(screen.getByRole('radio', { name: /Repartirlo en varios meses/ }));

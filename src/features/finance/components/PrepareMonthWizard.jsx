@@ -140,7 +140,7 @@ export function PrepareMonthWizard({
         <div className="mt-5 space-y-5">
           <dl className="rounded-2xl bg-surface-muted p-4 text-sm">
             <Row cents={balanceCents} currency={currency} label="Hay en la cuenta" />
-            {result.pendingContributionCents > 0 ? <Row cents={result.pendingContributionCents} currency={currency} label="+ Aportaciones que faltan por hacer" /> : null}
+            {result.pendingContributionCents > 0 ? <Row cents={result.pendingContributionCents} currency={currency} label="+ Aportación a la conjunta que falta por hacer" /> : null}
             <div className="border-t border-border"><Row cents={result.availableCents} currency={currency} label="Tendréis disponible" strong /></div>
           </dl>
           <dl className="rounded-2xl bg-surface-muted p-4 text-sm">
@@ -167,7 +167,7 @@ export function PrepareMonthWizard({
             </details>
           ) : null}
           <details className="rounded-2xl border border-border p-3 text-sm">
-            <summary className="min-h-11 cursor-pointer content-center font-bold">Aportación de cada persona · {formatCents(expectedTotalCents, currency)}</summary>
+            <summary className="min-h-11 cursor-pointer content-center font-bold">Aportación de cada persona, conjunta y personal · {formatCents(expectedTotalCents, currency)}</summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {people.map((person) => (
                 <article className="min-w-0 rounded-2xl bg-surface-muted p-4" key={person.personId}>
